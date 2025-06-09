@@ -1,0 +1,50 @@
+name: Execute Experiment
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  execution-of-automated-research-methods:
+    name: Execution of automated research methods
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run experiment
+        run: |
+          mkdir -p .research
+          iteration=1
+          while [ -d ".research/iteration$iteration" ]; do
+            iteration=$((iteration + 1))
+          done
+          iteration_dir=".research/iteration$iteration"
+          mkdir -p "$iteration_dir"
+          echo "Created directory: $iteration_dir"
+          python src/main.py > "$iteration_dir/output.txt" 2> "$iteration_dir/error.txt"
+        continue-on-error: true
+
+      - name: Commit and push results
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .research/
+          git commit -m "Add experiment results" || echo "No changes to commit"
+          git push
