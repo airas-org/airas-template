@@ -2,6 +2,10 @@ name: Execute Experiment
 
 on:
   workflow_dispatch:
+    inputs:
+      experiment_iteration:
+        description: "Iteration count"
+        required: true
 
 permissions:
   contents: write
@@ -32,11 +36,7 @@ jobs:
       - name: Run experiment
         run: |
           mkdir -p .research
-          iteration=1
-          while [ -d ".research/iteration$iteration" ]; do
-            iteration=$((iteration + 1))
-          done
-          iteration_dir=".research/iteration$iteration"
+          iteration_dir=".research/iteration${{ github.event.inputs.experiment_iteration }}"
           mkdir -p "$iteration_dir"
           echo "Created directory: $iteration_dir"
           python src/main.py > "$iteration_dir/output.txt" 2> "$iteration_dir/error.txt"
@@ -47,5 +47,5 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add .research/
-          git commit -m "Add experiment results" || echo "No changes to commit"
+          git commit -m "Add experiment results (iteration ${{ github.event.inputs.experiment_iteration }})" || echo "No changes to commit"
           git push
