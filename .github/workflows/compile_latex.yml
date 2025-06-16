@@ -1,0 +1,63 @@
+name: Compile LaTeX
+
+on:
+  workflow_dispatch:
+
+jobs:
+  compile-latex:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install TeX packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            texlive-base \
+            texlive-latex-recommended \
+            texlive-fonts-recommended \
+            texlive-latex-extra \
+            texlive-science \
+
+      - name: Copy latest images to .research/latex/images/
+        run: |
+          latest=$(ls .research | grep '^iteration[0-9]\+$' | sed 's/iteration//' | sort -n | tail -n1)
+          src_dir=".research/iteration${latest}/images"
+          dest_dir=".research/latex/images"
+          echo "Copying from $src_dir to $dest_dir"
+
+          mkdir -p "$dest_dir"
+          cp -r "$src_dir"/* "$dest_dir" || echo "No images to copy"
+
+      - name: Compile LaTeX
+        run: |
+          cd .research/latex
+          TEXFILE=$(ls *.tex | head -n1)
+          BASENAME=$(basename "$TEXFILE" .tex)
+
+          pdflatex -interaction=nonstopmode "$TEXFILE"
+          bibtex "$BASENAME"
+          pdflatex -interaction=nonstopmode "$TEXFILE"
+          pdflatex -interaction=nonstopmode "$TEXFILE"
+
+          echo "BASENAME=$BASENAME" >> $GITHUB_ENV
+
+          mkdir -p ../
+          cp "$BASENAME.pdf" ../
+          cp "$BASENAME.log" ../ || true
+
+      - name: Commit and push artifacts
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .research/latex/images
+          git add .research/${BASENAME}.pdf
+          git commit -m "Add LaTeX artifacts"
+          git push origin "${{ github.ref_name }}"
