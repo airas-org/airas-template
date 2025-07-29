@@ -52,16 +52,12 @@ jobs:
 
           echo "BASENAME=$BASENAME" >> $GITHUB_ENV
 
-          mkdir -p ../
-          cp "$BASENAME.pdf" ../ || true
-          cp "$LOGFILE" ../
-
       - name: Commit and push artifacts
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add .research/latex/images
-          git add .research/latex-error.log
-          git add .research/${BASENAME}.pdf
+          git add -f .research/latex/latex-error.log
+          git add .research/latex/${BASENAME}.pdf
           git commit -m "Add LaTeX artifacts and error log"
           git push origin "${{ github.ref_name }}"
