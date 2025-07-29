@@ -24,7 +24,7 @@ jobs:
             texlive-latex-recommended \
             texlive-fonts-recommended \
             texlive-latex-extra \
-            texlive-science \
+            texlive-science
 
       - name: Copy latest images to .research/latex/images/
         run: |
@@ -36,28 +36,32 @@ jobs:
           mkdir -p "$dest_dir"
           cp -r "$src_dir"/* "$dest_dir" || echo "No images to copy"
 
-      - name: Compile LaTeX
+      - name: Compile LaTeX and capture errors
         run: |
           cd .research/latex
           TEXFILE=$(ls *.tex | head -n1)
           BASENAME=$(basename "$TEXFILE" .tex)
 
-          pdflatex -interaction=nonstopmode "$TEXFILE"
-          bibtex "$BASENAME"
-          pdflatex -interaction=nonstopmode "$TEXFILE"
-          pdflatex -interaction=nonstopmode "$TEXFILE"
+          LOGFILE="latex-error.log"
+          : > "$LOGFILE"
+
+          pdflatex -interaction=nonstopmode "$TEXFILE" >> "$LOGFILE" 2>&1 || true
+          bibtex "$BASENAME" >> "$LOGFILE" 2>&1 || true
+          pdflatex -interaction=nonstopmode "$TEXFILE" >> "$LOGFILE" 2>&1 || true
+          pdflatex -interaction=nonstopmode "$TEXFILE" >> "$LOGFILE" 2>&1 || true
 
           echo "BASENAME=$BASENAME" >> $GITHUB_ENV
 
           mkdir -p ../
-          cp "$BASENAME.pdf" ../
-          cp "$BASENAME.log" ../ || true
+          cp "$BASENAME.pdf" ../ || true
+          cp "$LOGFILE" ../
 
       - name: Commit and push artifacts
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add .research/latex/images
+          git add .research/latex-error.log
           git add .research/${BASENAME}.pdf
-          git commit -m "Add LaTeX artifacts"
+          git commit -m "Add LaTeX artifacts and error log"
           git push origin "${{ github.ref_name }}"
