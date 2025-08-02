@@ -41,6 +41,7 @@ jobs:
           cd .research/latex
           TEXFILE=$(ls *.tex | head -n1)
           BASENAME=$(basename "$TEXFILE" .tex)
+          echo "BASENAME=$BASENAME" >> $GITHUB_ENV
 
           LOGFILE="latex-error.log"
           : > "$LOGFILE"
@@ -50,14 +51,21 @@ jobs:
           pdflatex -interaction=nonstopmode "$TEXFILE" >> "$LOGFILE" 2>&1 || true
           pdflatex -interaction=nonstopmode "$TEXFILE" >> "$LOGFILE" 2>&1 || true
 
-          echo "BASENAME=$BASENAME" >> $GITHUB_ENV
+      - name: Upload LaTeX logs and PDF as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: latex-artifacts
+          path: |
+            .research/latex/latex-error.log
+            .research/latex/${{ env.BASENAME }}.pdf
+          if-no-files-found: warn
 
       - name: Commit and push artifacts
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add .research/latex/images
-          git add -f .research/latex/latex-error.log
-          git add .research/latex/${BASENAME}.pdf
-          git commit -m "Add LaTeX artifacts and error log"
+          git add -f .research/latex/latex-error.log || true
+          git add .research/latex/${BASENAME}.pdf || true
+          git commit -m "Add LaTeX artifacts and error log" || echo "No changes to commit"
           git push origin "${{ github.ref_name }}"
