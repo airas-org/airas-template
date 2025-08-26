@@ -52,7 +52,7 @@ jobs:
         run: |
           set -o pipefail
           echo "=== experiment start $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
-          python src/main.py \
+          python -m src.main \
             > >(tee -a "$ITERATION_DIR/output.txt") \
             2> >(tee -a "$ITERATION_DIR/error.txt" >&2)
           echo "=== experiment end $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
