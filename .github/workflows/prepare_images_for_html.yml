@@ -1,4 +1,4 @@
-name: publish_html
+name: Prepare Images for HTML
 
 on:
   workflow_dispatch:
