@@ -35,20 +35,21 @@ jobs:
           cd "$LATEX_DIR"
 
           TEXFILE="paper.tex"
-          LOGFILE="chktex-log.txt"
+          LOGFILE="chktex.log"
+          : > "$LOGFILE"
 
           if [ ! -f "$TEXFILE" ]; then
             echo "Error: $TEXFILE not found in $LATEX_DIR"
             exit 1
           fi
 
-          echo "Running chktex on $TEXFILE..."
           chktex "$TEXFILE" | tee "$LOGFILE" || true
+
 
       - name: Commit and push chktex log
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add -f "${LATEX_DIR}/chktex-log.txt" || true
+          git add -f "${LATEX_DIR}/chktex.log" || true
           git commit -m "Add chktex log for ${SUBDIR}" || echo "No changes to commit"
           git push origin "${{ github.ref_name }}"
