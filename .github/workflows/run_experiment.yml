@@ -7,10 +7,10 @@ on:
         description: "Iteration count"
         required: true
       runner_type:
-        description: "Runner type (e.g., ubuntu-latest, self-hosted, gpu-runner)"
+        description: 'Runner type (e.g., ["ubuntu-latest"], ["self-hosted", "A100 80GM×8"])'
         required: true
-        default: "ubuntu-latest"
-      
+        default: '["ubuntu-latest"]'
+
 permissions:
   contents: write
 
@@ -21,8 +21,8 @@ defaults:
 jobs:
   execution-of-automated-research-methods:
     name: Execution of automated research methods
-    runs-on: ${{ github.event.inputs.runner_type }}
-    timeout-minutes: 180
+    runs-on: ${{ fromJSON(github.event.inputs.runner_type) }}
+    timeout-minutes: 6000
     steps:
       - uses: actions/checkout@v4
         with:
