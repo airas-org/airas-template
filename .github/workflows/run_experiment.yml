@@ -53,27 +53,16 @@ jobs:
           echo "=== uv install end $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
         continue-on-error: true
 
-      - name: Run experiment (smoke-test -> full)
+      - name: Run experiment (log to output/error)
         if: always()
         run: |
-          set -e
           set -o pipefail
+          echo "=== experiment start $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
 
-          echo "=== [PHASE 1/2] Smoke test start $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
-          uv run python -m src.main --smoke-test \
+          uv run python -m src.main \
             > >(tee -a "$ITERATION_DIR/output.txt") \
             2> >(tee -a "$ITERATION_DIR/error.txt" >&2)
-          echo "=== [PHASE 1/2] Smoke test PASSED $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
-
-          if [ -n "$ITERATION_DIR" ] && [ -d "$ITERATION_DIR" ]; then
-            find "$ITERATION_DIR" -mindepth 1 -not -name 'output.txt' -not -name 'error.txt' -delete
-          fi
-
-          echo "=== [PHASE 2/2] Full experiment start $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
-          uv run python -m src.main --full-experiment\
-            > >(tee -a "$ITERATION_DIR/output.txt") \
-            2> >(tee -a "$ITERATION_DIR/error.txt" >&2)
-          echo "=== [PHASE 2/2] Full experiment end $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
+          echo "=== experiment end $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
         continue-on-error: true
 
       - name: Commit and push results
