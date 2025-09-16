@@ -32,8 +32,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"
-          enable-cache: true
-          cache-dependency-glob: pyproject.toml
+          enable-cache: false
 
       - name: Prepare iteration dir
         run: |
