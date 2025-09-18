@@ -56,7 +56,6 @@ jobs:
         if: always()
         run: |
           set -e
-          set -o pipefail
           
           echo "=== [PHASE 1/2] Smoke test start $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
           uv run python -u -m src.main --smoke-test \
