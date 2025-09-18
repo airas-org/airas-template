@@ -1,4 +1,4 @@
-name: Execute Experiment
+name: Run Experiment
 
 on:
   workflow_dispatch:
@@ -59,7 +59,7 @@ jobs:
           set -o pipefail
           
           echo "=== [PHASE 1/2] Smoke test start $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
-          uv run python -m src.main --smoke-test \
+          uv run python -u -m src.main --smoke-test \
             > >(tee -a "$ITERATION_DIR/output.txt") \
             2> >(tee -a "$ITERATION_DIR/error.txt" >&2)
           echo "=== [PHASE 1/2] Smoke test PASSED $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
@@ -69,7 +69,7 @@ jobs:
           fi
 
           echo "=== [PHASE 2/2] Full experiment start $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
-          uv run python -m src.main --full-experiment \
+          uv run python -u -m src.main --full-experiment \
             > >(tee -a "$ITERATION_DIR/output.txt") \
             2> >(tee -a "$ITERATION_DIR/error.txt" >&2)
           echo "=== [PHASE 2/2] Full experiment end $(date -u) ===" | tee -a "$ITERATION_DIR/output.txt"
