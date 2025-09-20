@@ -108,7 +108,7 @@ jobs:
             5.  Run Full Experiment: Once the smoke test passes, execute `bash -c "$FULL_EXPERIMENT_COMMAND"`.
             6.  Final Fix Loop:** If the full experiment fails, repeat the analyze, fix, and re-run cycle until it succeeds.
           
-          claude_args: "--max-turns=50 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite"
+          claude_args: "--max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite"
 
       - name: Commit and push experiment results
         if: always()
