@@ -2,11 +2,14 @@ name: Prepare Images for HTML
 
 on:
   workflow_dispatch:
+    inputs:
+      selected_branches:
+          description: 'Branches to fetch images from (comma-separated)'
+          required: true
 
 jobs:
   convert-and-upload:
     runs-on: ubuntu-latest
-
     permissions:
       contents: write
 
@@ -14,6 +17,7 @@ jobs:
       - name: Checkout current branch
         uses: actions/checkout@v4
         with:
+          ref: "gh-pages"
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install PDF to PNG tools
@@ -21,26 +25,42 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y poppler-utils
 
-      - name: Get latest iterationX/images and convert PDF to PNG
+      - name: Fetch PDFs from selected branches
         run: |
-          latest=$(ls .research | grep '^iteration[0-9]\+$' | sed 's/iteration//' | sort -n | tail -n1)
-          img_dir=".research/iteration${latest}/images"
-          echo "Found directory: $img_dir"
           mkdir -p output_images
-          for pdf in "$img_dir"/*.pdf; do
-            name=$(basename "$pdf" .pdf)
-            pdftoppm "$pdf" "output_images/${name}" -png
+          IFS=',' read -ra branches <<< "${{ github.event.inputs.selected_branches }}"
+
+          for branch in "${branches[@]}"; do
+            echo "Processing branch: $branch"
+
+            tmp_dir="$(mktemp -d)"
+            git fetch origin $branch
+            git --work-tree="$tmp_dir" checkout origin/$branch -- .research/ || true
+
+            latest=$(ls "$tmp_dir/.research" | grep '^iteration[0-9]\+$' | sed 's/iteration//' | sort -n | tail -n1)
+            if [ -n "$latest" ]; then
+              img_dir=".research/iteration${latest}/images"
+
+              if [ -d "$img_dir" ]; then
+                for pdf in "$img_dir"/*.pdf; do
+                  [ -e "$pdf" ] || continue
+                  name=$(basename "$pdf" .pdf)
+                  pdftoppm "$pdf" "output_images/${name}" -png
+                done
+              else
+                echo "No images found in $branch"
+              fi
+            else
+              echo "No iteration directories in $branch"
+            fi
+
+            rm -rf "$tmp_dir"
           done
 
           for png in output_images/*-1.png; do
             base=$(basename "$png" -1.png)
             mv "$png" "output_images/${base}.png"
           done
-
-      - name: Switch to gh-pages branch
-        run: |
-          git fetch origin gh-pages
-          git checkout gh-pages
 
       - name: Copy converted PNGs to gh-pages branch
         run: |
