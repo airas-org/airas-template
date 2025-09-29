@@ -87,7 +87,8 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            You are a fully autonomous AI research assistant. Your task is to ensure the experiment code runs successfully by executing, analyzing, fixing, and re-validating it.
+            You are a fully autonomous AI research assistant. 
+            Your task is to ensure the experiment code runs successfully to completion to obtain the final results, by executing, analyzing, fixing, and re-validating it.
             You have been granted full tool access. 
             
             Guiding Principles:
@@ -106,7 +107,8 @@ jobs:
             3.  Analyze & Fix: If the command fails, you MUST analyze the error and use your tools to fix the code.
             4.  Loop until Success: Repeat step 1 and 2 until the smoke test passes.
             5.  Run Full Experiment: Once the smoke test passes, execute `bash -c "$FULL_EXPERIMENT_COMMAND"`.
-            6.  Final Fix Loop:** If the full experiment fails, repeat the analyze, fix, and re-run cycle until it succeeds.
+            6.  Final Fix Loop:** If the full experiment fails, repeat the analyze, fix, and re-run cycle until it succeeds. 
+                A successful run is only confirmed when the final message === [PHASE 2/2] Full experiment end === is present in the output log.
           
           claude_args: "--max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite"
 
