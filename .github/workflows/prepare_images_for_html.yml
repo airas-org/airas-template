@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       selected_branches:
-          description: 'Branches to fetch images from (comma-separated)'
+          description: 'Branches to fetch images from (JSON array format)'
           required: true
 
 jobs:
@@ -28,7 +28,7 @@ jobs:
       - name: Fetch PDFs from selected branches
         run: |
           mkdir -p output_images
-          IFS=',' read -ra branches <<< "${{ github.event.inputs.selected_branches }}"
+          readarray -t branches < <(echo '${{ github.event.inputs.selected_branches }}' | jq -r '.[]')
 
           for branch in "${branches[@]}"; do
             echo "Processing branch: $branch"
@@ -39,7 +39,7 @@ jobs:
 
             latest=$(ls "$tmp_dir/.research" | grep '^iteration[0-9]\+$' | sed 's/iteration//' | sort -n | tail -n1)
             if [ -n "$latest" ]; then
-              img_dir=".research/iteration${latest}/images"
+              img_dir="$tmp_dir/.research/iteration${latest}/images"
 
               if [ -d "$img_dir" ]; then
                 for pdf in "$img_dir"/*.pdf; do
