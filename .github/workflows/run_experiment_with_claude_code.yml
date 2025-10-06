@@ -82,7 +82,7 @@ jobs:
             While it runs, you MUST monitor progress every 30 minutes by checking only the tail of the output log.
         6.  Final Fix Loop:** If the full experiment fails, repeat the analyze, fix, and re-run cycle until it succeeds. 
             A successful run is only confirmed when the final message === [PHASE 2/2] Full experiment end === is present in the output log.
-      
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
