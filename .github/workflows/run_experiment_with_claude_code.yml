@@ -1,4 +1,4 @@
-name: Run Experiment by Claude Code
+name: Run Experiment with Claude Code
 
 on:
   workflow_dispatch:
