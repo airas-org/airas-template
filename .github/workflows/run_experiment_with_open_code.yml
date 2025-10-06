@@ -1,4 +1,4 @@
-name: Run Experiment by Claude Code
+name: Run Experiment by Open Code
 
 on:
   workflow_dispatch:
@@ -10,6 +10,10 @@ on:
         description: 'Runner type (e.g., ["ubuntu-latest"], ["self-hosted", "A100"])'
         required: true
         default: '["ubuntu-latest"]'
+      model_name:
+        description: "Model to use"
+        required: true
+        default: 'anthropic/claude-sonnet-4-5-20250929'
 
 permissions:
   id-token: write
@@ -95,27 +99,28 @@ jobs:
           python-version: "3.11"
           enable-cache: false
 
-      - name: Install jq (static binary, user-local)
-        run: |
-          mkdir -p $HOME/bin
-          curl -L -o $HOME/bin/jq https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64
-          chmod +x $HOME/bin/jq
-          echo "$HOME/bin" >> $GITHUB_PATH
-
       - name: Prepare iteration dir
         run: |
           iteration_dir=".research/iteration${{ github.event.inputs.experiment_iteration }}"
           mkdir -p "$iteration_dir"
           echo "ITERATION_DIR=$iteration_dir" >> "$GITHUB_ENV"
 
-      - name: Claude Code Autonomous Run, Fix, and Validate Loop
-        uses: anthropics/claude-code-action@v1
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install opencode
+        shell: bash
+        run: |
+          npm install -g bun
+          curl -fsSL https://opencode.ai/install | bash
+
+      - name: OpenCode Autonomous Run, Fix, and Validate Loop
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: ${{ env.PROMPT }}
-          claude_args: "--max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite"
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: opencode run --model "${{ github.event.inputs.model_name }}" "$PROMPT"
 
       - name: Commit and push experiment results
         if: always()
