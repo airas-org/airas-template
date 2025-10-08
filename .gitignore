@@ -189,3 +189,4 @@ models/
 *.ally
 *.graph
 *.index
+*.pth
