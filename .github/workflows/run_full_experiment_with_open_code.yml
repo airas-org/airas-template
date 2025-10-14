@@ -113,44 +113,29 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: opencode run --model "${{ github.event.inputs.model_name }}" "$PROMPT"
-
-      - name: Extract and Save W&B Run Information
+      
+      - name: Download images from W&B (if W&B is used)
         if: secrets.WANDB_API_KEY != '' && success()
         env:
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
         run: |
-          echo "Searching for W&B run path in logs..."
-          WANDB_URL=$(grep -o 'https://wandb.ai/[^ ]*/runs/[^ ]*' "$RESULTS_DIR/output.txt" | tail -n 1)
-
-          if [ -n "$WANDB_URL" ]; then
-            WANDB_RUN_PATH=$(echo "$WANDB_URL" | sed -E 's#https://wandb.ai/([^/]+)/([^/]+)/runs/([^/]+).*#\1/\2/\3#')
-            echo "Extracted W&B run path: $WANDB_RUN_PATH"
-
-            IFS='/' read -r ENTITY PROJECT RUN_ID <<< "$WANDB_RUN_PATH"
-
-            echo "WANDB_ENTITY=$ENTITY" >> "$GITHUB_ENV"
-            echo "WANDB_PROJECT=$PROJECT" >> "$GITHUB_ENV"
-            echo "WANDB_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
-            echo "W&B info set to environment variables for subsequent steps."
-
             METADATA_FILE="$RESULTS_DIR/wandb_metadata.json"
-            echo "Creating metadata file at $METADATA_FILE"
-            jq -n \
-              --arg entity "$ENTITY" \
-              --arg project "$PROJECT" \
-              --arg run_id "$RUN_ID" \
-              '{wandb_entity: $entity, wandb_project: $project, wandb_run_id: $run_id}' \
-              > "$METADATA_FILE"
-              
-          else
-            echo "W&B run URL not found in logs."
-          fi
-      
-      - name: Download images from W&B (if W&B is used)
-        if: secrets.WANDB_API_KEY != '' && env.WANDB_RUN_ID
-        env:
-          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
-        run: |
+
+            if [ ! -f "$METADATA_FILE" ]; then
+              echo "W&B metadata file not found at $METADATA_FILE. Skipping image download."
+              exit 0
+            fi
+
+            echo "Reading W&B metadata from $METADATA_FILE..."
+            WANDB_ENTITY=$(jq -r '.wandb_entity' "$METADATA_FILE")
+            WANDB_PROJECT=$(jq -r '.wandb_project' "$METADATA_FILE")
+            WANDB_RUN_ID=$(jq -r '.wandb_run_id' "$METADATA_FILE")
+
+            if [ -z "$WANDB_RUN_ID" ]; then
+              echo "W&B run_id not found or is empty in metadata file. Skipping image download."
+              exit 0
+            fi
+
             echo "Downloading media files from W&B run (Entity: ${{ env.WANDB_ENTITY }}, Project: ${{ env.WANDB_PROJECT }}, Run ID: ${{ env.WANDB_RUN_ID }})"
             DOWNLOAD_DIR="$RESULTS_DIR/images"
             mkdir -p "$DOWNLOAD_DIR"
