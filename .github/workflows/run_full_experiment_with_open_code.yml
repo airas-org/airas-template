@@ -114,7 +114,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: opencode run --model "${{ github.event.inputs.model_name }}" "$PROMPT"
 
-      - name: Download images from W&B (if W&B is used)
+      - name: Extract and Save W&B Run Information
         if: secrets.WANDB_API_KEY != '' && success()
         env:
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
@@ -127,12 +127,36 @@ jobs:
             echo "Extracted W&B run path: $WANDB_RUN_PATH"
 
             IFS='/' read -r ENTITY PROJECT RUN_ID <<< "$WANDB_RUN_PATH"
+
+            echo "WANDB_ENTITY=$ENTITY" >> "$GITHUB_ENV"
+            echo "WANDB_PROJECT=$PROJECT" >> "$GITHUB_ENV"
+            echo "WANDB_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+            echo "W&B info set to environment variables for subsequent steps."
+
+            METADATA_FILE="$RESULTS_DIR/wandb_metadata.json"
+            echo "Creating metadata file at $METADATA_FILE"
+            jq -n \
+              --arg entity "$ENTITY" \
+              --arg project "$PROJECT" \
+              --arg run_id "$RUN_ID" \
+              '{wandb_entity: $entity, wandb_project: $project, wandb_run_id: $run_id}' \
+              > "$METADATA_FILE"
+              
+          else
+            echo "W&B run URL not found in logs."
+          fi
+      
+      - name: Download images from W&B (if W&B is used)
+        if: secrets.WANDB_API_KEY != '' && env.WANDB_RUN_ID
+        env:
+          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+        run: |
+            echo "Downloading media files from W&B run (Entity: ${{ env.WANDB_ENTITY }}, Project: ${{ env.WANDB_PROJECT }}, Run ID: ${{ env.WANDB_RUN_ID }})"
             DOWNLOAD_DIR="$RESULTS_DIR/images"
             mkdir -p "$DOWNLOAD_DIR"
 
-            echo "Downloading media files from W&B run..."
             curl -s -H "Authorization: Bearer $WANDB_API_KEY" \
-              "https://api.wandb.ai/files/$ENTITY/$PROJECT/$RUN_ID" \
+              "https://api.wandb.ai/files/$WANDB_ENTITY/$WANDB_PROJECT/$WANDB_RUN_ID" \
               | jq -r '.files[] | select(.name | test("media/images/")) | .name' \
               | while read -r IMAGE_PATH; do
                   echo "Downloading $IMAGE_PATH..."
@@ -140,12 +164,9 @@ jobs:
                   mkdir -p "$IMAGE_DIR"
                   curl -s -H "Authorization: Bearer $WANDB_API_KEY" \
                     -o "$DOWNLOAD_DIR/$IMAGE_PATH" \
-                    "https://api.wandb.ai/files/$ENTITY/$PROJECT/$RUN_ID/$IMAGE_PATH"
+                    "https://api.wandb.ai/files/$WANDB_ENTITY/$WANDB_PROJECT/$WANDB_RUN_ID/$IMAGE_PATH"
                 done
             echo "Download complete. Saved to $DOWNLOAD_DIR"
-          else
-            echo "W&B run path file not found. Skipping image download."
-          fi
 
       - name: Commit and push experiment results
         if: always()
@@ -155,8 +176,7 @@ jobs:
           git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
           git add "$RESULTS_DIR"
           git add --update .
-          
-           
+
           if ! git diff --staged --quiet; then
             git commit -m "[CI] Commit all changes from autonomous run (iteration ${{ github.event.inputs.experiment_iteration }})"
             for i in {1..5}; do
