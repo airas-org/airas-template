@@ -39,7 +39,8 @@ jobs:
         echo "=== [TRIAL RUN] Start for ${RUN_ID_PLACEHOLDER} at $(date -u) ===" | tee -a "$RESULTS_DIR/output.txt"
         uv run python -u -m src.main \
           run=${RUN_ID_PLACEHOLDER} \
-          results_dir="$RESULTS_DIR"
+          results_dir="$RESULTS_DIR" \
+          wandb.mode=disabled
           > >(tee -a "$RESULTS_DIR/output.txt") \
           2> >(tee -a "$RESULTS_DIR/error.txt" >&2)
       SEARCH_HF_COMMAND: |
