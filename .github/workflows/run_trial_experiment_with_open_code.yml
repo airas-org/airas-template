@@ -60,7 +60,7 @@ jobs:
 
         Guiding Principles:
         - Scope: Do not perform any Git operations like commit or push. Your responsibility is to make the code for the current run ID runnable.
-        - Method: When fixing errors, you MUST only modify existing files. Do not create any new script files.
+        - Method: When fixing errors, You MUST only modify existing files; do not create or delete any files.
         - Autonomy: Execute all steps autonomously. Do not ask for permission.
         - Resource Errors: If a Hugging Face resource is unavailable, you MUST find and implement a public alternative. To do this, you MUST first set two variables:
           1.  `RESOURCE_TYPE`: Set to either `"models"` or `"datasets"`.
@@ -121,7 +121,6 @@ jobs:
             git config --local user.name "GitHub Action"
             git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
 
-            git add "$RESULTS_DIR"
             git add --update .
             
             if ! git diff --staged --quiet; then

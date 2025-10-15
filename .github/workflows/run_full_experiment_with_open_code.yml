@@ -63,7 +63,7 @@ jobs:
         
         Guiding Principles:
         - Scope: Do not perform any Git operations like commit or push. Your sole responsibility is to make the code runnable.
-        - Method: When fixing errors, you MUST only modify existing files. Do not create any new script files.
+        - Method: When fixing errors, Method: When fixing errors, you MUST only modify existing files; do not create or delete any files.
         - Autonomy: Execute all steps autonomously. Do not ask for permission.
         - Long-Running Tasks: Be aware that the full experiment can take many hours. You MUST set tool execution timeouts appropriately to avoid premature failures.
         - Resource Errors: If a Hugging Face resource is unavailable, you MUST find and implement a public alternative. To do this, you MUST first set two variables:
