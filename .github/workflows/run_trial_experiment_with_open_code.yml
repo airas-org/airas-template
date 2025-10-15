@@ -40,7 +40,8 @@ jobs:
         uv run python -u -m src.main \
           run=${RUN_ID_PLACEHOLDER} \
           results_dir="$RESULTS_DIR" \
-          wandb.mode=disabled
+          wandb.mode=disabled \
+          trial_mode=true
           > >(tee -a "$RESULTS_DIR/output.txt") \
           2> >(tee -a "$RESULTS_DIR/error.txt" >&2)
       SEARCH_HF_COMMAND: |
@@ -57,10 +58,6 @@ jobs:
         You are an autonomous AI research assistant. Your current task is to make the experiment code runnable.
         You have been granted full tool access. 
 
-        Your Goal:
-        - Your sole objective is to successfully execute the initial trial run.
-        - You do NOT need to run the full, long-running experiment. Your task is complete once the trial run passes without errors.
-        
         Guiding Principles:
         - Scope: Do not perform any Git operations like commit or push. Your responsibility is to make the code for the current run ID runnable.
         - Method: When fixing errors, you MUST only modify existing files. Do not create any new script files.
