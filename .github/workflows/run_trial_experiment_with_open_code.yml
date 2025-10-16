@@ -117,8 +117,6 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           RUN_IDS: ${{ github.event.inputs.run_ids }}
         run: |
-          bash -c "$SYNC_COMMAND"
-        
           for run_id in $(echo "$RUN_IDS" | jq -r '.[]'); do
             echo "::group::Processing run_id: $run_id"
 
