@@ -36,15 +36,15 @@ jobs:
       SYNC_COMMAND: "uv sync"
       TRIAL_RUN_COMMAND_TEMPLATE: |
         set -e
-        echo "=== [TRIAL RUN] Start for ${RUN_ID_PLACEHOLDER} at $(date -u) ===" | tee -a "$RESULTS_DIR/output.txt"
+        echo "=== [TRIAL RUN] Start for ${RUN_ID_PLACEHOLDER} at $(date -u) ===" | tee -a "$RESULTS_DIR/stdout.txt"
 
-        uv run python -u -m src.main \
+        uv run python -m src.main \
           run=${RUN_ID_PLACEHOLDER} \
           results_dir="$RESULTS_DIR" \
           wandb.mode=disabled \
           trial_mode=true \
-          > >(tee -a "$RESULTS_DIR/output.txt") \
-          2> >(tee -a "$RESULTS_DIR/error.txt" >&2)
+          > >(tee -a "$RESULTS_DIR/stdout.txt") \
+          2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
       SEARCH_HF_COMMAND: |
         curl -s -G \
           -H "Authorization: Bearer $HF_TOKEN" \

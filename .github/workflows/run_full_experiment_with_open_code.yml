@@ -39,14 +39,14 @@ jobs:
         if [ -n "$RESULTS_DIR" ] && [ -d "$RESULTS_DIR" ]; then
           find "$RESULTS_DIR" -mindepth 1 -delete
         fi
-        echo "=== [FULL EXPERIMENT] Start for ${{ github.event.inputs.run_id }} at $(date -u) ===" | tee -a "$RESULTS_DIR/output.txt"
+        echo "=== [FULL EXPERIMENT] Start for ${{ github.event.inputs.run_id }} at $(date -u) ===" | tee -a "$RESULTS_DIR/stdout.txt"
 
-        uv run python -u -m src.main \
+        uv run python -m src.main \
           run=${{ github.event.inputs.run_id  }} \
           results_dir="$RESULTS_DIR" \
-          > >(tee -a "$RESULTS_DIR/output.txt") \
-          2> >(tee -a "$RESULTS_DIR/error.txt" >&2)
-        echo "=== [FULL EXPERIMENT] PASSED for ${{ github.event.inputs.run_id }} at $(date -u) ===" | tee -a "$RESULTS_DIR/output.txt"
+          > >(tee -a "$RESULTS_DIR/stdout.txt") \
+          2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
+        echo "=== [FULL EXPERIMENT] PASSED for ${{ github.event.inputs.run_id }} at $(date -u) ===" | tee -a "$RESULTS_DIR/stdout.txt"
       SEARCH_HF_COMMAND: |
         curl -s -G \
           -H "Authorization: Bearer $HF_TOKEN" \
@@ -116,45 +116,6 @@ jobs:
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
         run: opencode run --model "${{ github.event.inputs.model_name }}" "$PROMPT"
       
-      - name: Download images from W&B (if W&B is used)
-        if: secrets.WANDB_API_KEY != '' && success()
-        env:
-          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
-        run: |
-            METADATA_FILE="$RESULTS_DIR/wandb_metadata.json"
-
-            if [ ! -f "$METADATA_FILE" ]; then
-              echo "W&B metadata file not found at $METADATA_FILE. Skipping image download."
-              exit 0
-            fi
-
-            echo "Reading W&B metadata from $METADATA_FILE..."
-            WANDB_ENTITY=$(jq -r '.wandb_entity' "$METADATA_FILE")
-            WANDB_PROJECT=$(jq -r '.wandb_project' "$METADATA_FILE")
-            WANDB_RUN_ID=$(jq -r '.wandb_run_id' "$METADATA_FILE")
-
-            if [ -z "$WANDB_RUN_ID" ]; then
-              echo "W&B run_id not found or is empty in metadata file. Skipping image download."
-              exit 0
-            fi
-
-            echo "Downloading media files from W&B run (Entity: ${{ env.WANDB_ENTITY }}, Project: ${{ env.WANDB_PROJECT }}, Run ID: ${{ env.WANDB_RUN_ID }})"
-            DOWNLOAD_DIR="$RESULTS_DIR/images"
-            mkdir -p "$DOWNLOAD_DIR"
-
-            curl -s -H "Authorization: Bearer $WANDB_API_KEY" \
-              "https://api.wandb.ai/files/$WANDB_ENTITY/$WANDB_PROJECT/$WANDB_RUN_ID" \
-              | jq -r '.files[] | select(.name | test("media/images/")) | .name' \
-              | while read -r IMAGE_PATH; do
-                  echo "Downloading $IMAGE_PATH..."
-                  IMAGE_DIR=$(dirname "$DOWNLOAD_DIR/$IMAGE_PATH")
-                  mkdir -p "$IMAGE_DIR"
-                  curl -s -H "Authorization: Bearer $WANDB_API_KEY" \
-                    -o "$DOWNLOAD_DIR/$IMAGE_PATH" \
-                    "https://api.wandb.ai/files/$WANDB_ENTITY/$WANDB_PROJECT/$WANDB_RUN_ID/$IMAGE_PATH"
-                done
-            echo "Download complete. Saved to $DOWNLOAD_DIR"
-
       - name: Commit and push experiment results
         if: always()
         run: |
