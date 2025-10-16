@@ -127,7 +127,7 @@ jobs:
             git config --local user.email "action@github.com"
             git config --local user.name "GitHub Action"
             git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
-
+            git add "$RESULTS_DIR"
             git add --update .
             
             if ! git diff --staged --quiet; then
