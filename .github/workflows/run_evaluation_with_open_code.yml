@@ -3,6 +3,9 @@ name: Run Evaluation with Open Code
 on:
   workflow_dispatch:
     inputs:
+      run_ids:
+        description: 'A JSON array of run_ids to process'
+        required: true
       experiment_iteration:
         description: "Iteration count"
         required: true
@@ -29,12 +32,11 @@ jobs:
       SYNC_COMMAND: "uv sync"
       EVALUATION_COMMAND: |
         set -e
-        mkdir -p "$RESULTS_DIR/images"
-        mkdir -p "$RESULTS_DIR/wandb_data"
         echo "=== [EVALUATION] Start at $(date -u) ==="
 
         uv run python -m src.evaluate \
-          results_dir="$RESULTS_DIR"
+          results_dir="$RESULTS_DIR" \
+          run_ids='${{ inputs.run_ids }}'
         echo "=== [EVALUATION] PASSED at $(date -u) ==="
       PROMPT: |
         You are a fully autonomous AI research assistant.
