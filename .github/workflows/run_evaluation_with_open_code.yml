@@ -54,6 +54,28 @@ jobs:
             While it runs, you MUST monitor progress by checking the tail of the output log.
         3.  Analyze & Fix Loop: If evaluation fails, you MUST analyze the error, use your tools to fix the code, and then re-run evaluation. Repeat this cycle until it succeeds.
             A successful run is only confirmed when a message starting with `=== [EVALUATION] PASSED` is present in the output log.
+        4. Visual Quality Check: Once evaluation succeeds, you MUST:
+            a. Locate all generated figures in `$RESULTS_DIR`:
+              - Per-run figures in `$RESULTS_DIR/{run_id}/*.pdf` (or .png)
+              - Comparison figures in `$RESULTS_DIR/comparison/*.pdf` (or .png)
+
+            b. Read and analyze EACH figure for visual quality issues:
+              - Font sizes: Are axis labels, titles, legends readable? (not too small/large)
+              - Scale consistency: Do comparison plots use consistent Y-axis ranges?
+              - Color distinction: Are different lines/bars easily distinguishable?
+              - Layout: Is tight_layout applied? Are elements overlapping?
+              - Annotations: Are important values annotated on the figures?
+              - Resolution: Is the figure clear and publication-quality?
+
+            c. If ANY figure has visual quality issues:
+              - Identify the specific problem (e.g., "font size too small", "inconsistent Y-axis scales")
+              - Modify `src/evaluate.py` to fix the visualization code
+              - Re-run the entire evaluation from step 2
+              - Repeat until ALL figures pass visual quality checks
+
+            d. Only exit successfully when:
+              - Evaluation completes without errors
+              - ALL generated figures meet publication-quality standards
 
     steps:
       - name: Checkout repository
