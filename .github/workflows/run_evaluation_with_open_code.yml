@@ -111,7 +111,17 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
-        run: opencode run --model "${{ github.event.inputs.model_name }}" "$PROMPT"
+        run: |
+          for i in {1..10}; do
+            opencode run --model "${{ github.event.inputs.model_name }}" "$PROMPT" && break
+            if [ $i -lt 10 ]; then
+              echo "Attempt $i failed with exit code $?. Retrying in $((2**i)) seconds..."
+              sleep $((2**i))
+            else
+              echo "All 10 attempts failed."
+              exit 1
+            fi
+          done
 
       - name: Commit and push evaluation results
         if: always()

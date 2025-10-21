@@ -125,7 +125,17 @@ jobs:
 
             export RUN_ID_PLACEHOLDER=$run_id
             export TRIAL_RUN_COMMAND=$(echo "$TRIAL_RUN_COMMAND_TEMPLATE" | envsubst)
-            opencode run --model "${{ github.event.inputs.model_name }}" "$PROMPT"
+
+            for i in {1..10}; do
+              opencode run --model "${{ github.event.inputs.model_name }}" "$PROMPT" && break
+              if [ $i -lt 10 ]; then
+                echo "Attempt $i failed with exit code $?. Retrying in $((2**i)) seconds..."
+                sleep $((2**i))
+              else
+                echo "All 10 attempts failed."
+                exit 1
+              fi
+            done
 
             git config --local user.email "action@github.com"
             git config --local user.name "GitHub Action"
