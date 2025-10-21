@@ -6,9 +6,6 @@ on:
       subdir:
         description: 'Subdirectory under .research/latex/ (e.g., iclr2025)'
         required: true
-      image_source_branches:
-        description: 'Branches to fetch images from (JSON array format)'
-        required: true
       model_name:
         description: "Model to use"
         required: true
@@ -75,8 +72,7 @@ jobs:
             texlive-latex-recommended \
             texlive-fonts-recommended \
             texlive-latex-extra \
-            texlive-science \
-            jq
+            texlive-science
 
       - name: Setup Node.js Environment
         uses: actions/setup-node@v4
@@ -89,32 +85,6 @@ jobs:
 
       - name: Install bun
         run: npm install -g bun
-
-      - name: Fetch images from selected branches
-        run: |
-          dest_dir="${LATEX_DIR}/images"
-          mkdir -p "$dest_dir"
-          readarray -t branches < <(echo '${{ github.event.inputs.image_source_branches }}' | jq -r '.[]')
-
-          for branch in "${branches[@]}"; do
-            echo "Processing branch: $branch"
-
-            tmp_dir="$(mktemp -d)"
-            git fetch origin $branch
-            git --work-tree="$tmp_dir" checkout origin/$branch -- .research/ || true
-
-            latest=$(ls "$tmp_dir/.research" | grep '^iteration[0-9]\+$' | sed 's/iteration//' | sort -n | tail -n1)
-
-            if [ -n "$latest" ]; then
-              src_dir="$tmp_dir/.research/iteration${latest}/images"
-              echo "Copying from $src_dir to $dest_dir"
-              cp -r "$src_dir"/* "$dest_dir" || echo "No images to copy"
-            else
-              echo "No iteration directories found in $branch"
-            fi
-
-            rm -rf "$tmp_dir"
-          done
 
       - name: OpenCode Autonomous LaTeX Fix and Compile Loop
         env:
@@ -141,7 +111,7 @@ jobs:
           git add .
 
           if ! git diff --staged --quiet; then
-            git commit -m "[CI] Autonomous LaTeX fixes and compilation for ${{ github.event.inputs.latex_subdir }}"
+            git commit -m "[CI] Autonomous LaTeX fixes and compilation for ${{ github.event.inputs.subdir }}"
             for i in {1..5}; do
               git push && break
               echo "Push failed on attempt $i. Retrying in $((2**i)) seconds..."

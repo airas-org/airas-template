@@ -2,10 +2,6 @@ name: Prepare Images for HTML
 
 on:
   workflow_dispatch:
-    inputs:
-      selected_branches:
-          description: 'Branches to fetch images from (JSON array format)'
-          required: true
 
 jobs:
   convert-and-upload:
@@ -16,62 +12,71 @@ jobs:
     steps:
       - name: Checkout current branch
         uses: actions/checkout@v4
-        with:
-          ref: "gh-pages"
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install PDF to PNG tools
         run: |
           sudo apt-get update
           sudo apt-get install -y poppler-utils
 
-      - name: Fetch PDFs from selected branches
+      - name: Convert PDFs to PNGs
         run: |
-          mkdir -p output_images
-          readarray -t branches < <(echo '${{ github.event.inputs.selected_branches }}' | jq -r '.[]')
+          set -e
+          tmp_dir="/tmp/output_images"
+          mkdir -p "$tmp_dir"
+          research_dir=".research"
 
-          for branch in "${branches[@]}"; do
-            echo "Processing branch: $branch"
+          if [ ! -d "$research_dir" ]; then
+            echo "Directory $research_dir not found."
+            exit 0
+          fi
 
-            tmp_dir="$(mktemp -d)"
-            git fetch origin $branch
-            git --work-tree="$tmp_dir" checkout origin/$branch -- .research/ || true
+          latest=$(ls "$research_dir" | grep '^iteration[0-9]\+$' | sed 's/iteration//' | sort -n | tail -n1 || true)
+          if [ -z "$latest" ]; then
+            echo "No iteration directories found"
+            exit 0
+          fi
 
-            latest=$(ls "$tmp_dir/.research" | grep '^iteration[0-9]\+$' | sed 's/iteration//' | sort -n | tail -n1)
-            if [ -n "$latest" ]; then
-              img_dir="$tmp_dir/.research/iteration${latest}/images"
+          img_dir="$research_dir/iteration${latest}/images"
+          if [ ! -d "$img_dir" ]; then
+            echo "No images directory found at $img_dir"
+            exit 0
+          fi
 
-              if [ -d "$img_dir" ]; then
-                for pdf in "$img_dir"/*.pdf; do
-                  [ -e "$pdf" ] || continue
-                  name=$(basename "$pdf" .pdf)
-                  pdftoppm "$pdf" "output_images/${name}" -png
-                done
-              else
-                echo "No images found in $branch"
-              fi
-            else
-              echo "No iteration directories in $branch"
-            fi
-
-            rm -rf "$tmp_dir"
+          echo "Looking for PDFs in $img_dir"
+          for pdf in "$img_dir"/*.pdf; do
+            name=$(basename "$pdf" .pdf)
+            echo "Converting $pdf to PNG..."
+            pdftoppm "$pdf" "$tmp_dir/${name}" -png
           done
 
-          for png in output_images/*-1.png; do
+          for png in $tmp_dir/*-1.png; do
             base=$(basename "$png" -1.png)
-            mv "$png" "output_images/${base}.png"
+            mv "$png" "$tmp_dir/${base}.png"
           done
 
       - name: Copy converted PNGs to gh-pages branch
         run: |
+          git fetch origin gh-pages || git branch gh-pages
+          git checkout gh-pages
+
           target_dir="branches/${{ github.ref_name }}/images"
           mkdir -p "$target_dir"
-          cp output_images/*.png "$target_dir"
+          cp /tmp/output_images/*.png "$target_dir"
 
       - name: Commit and push to gh-pages
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
           git add branches/
-          git commit -m "Upload PNGs from ${{ github.ref_name }}"
-          git push origin gh-pages
+
+          if ! git diff --staged --quiet; then
+            git commit -m "Upload PNGs from ${{ github.ref_name }}"
+            for i in {1..5}; do
+              git push && break
+              echo "Push failed on attempt $i. Retrying in $((2**i)) seconds..."
+              sleep $((2**i))
+            done
+          else
+            echo "No changes were made by the agent."
+          fi
