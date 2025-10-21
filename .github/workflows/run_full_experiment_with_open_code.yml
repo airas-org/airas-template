@@ -85,7 +85,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install uv and dependencies
+      - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"
