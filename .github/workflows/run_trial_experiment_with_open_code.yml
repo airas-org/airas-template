@@ -1,4 +1,4 @@
-name: Run and Fix Trial Experiments Sequentially with OpenCode
+name: Run Trial Experiment with Open Code
 
 on:
   workflow_dispatch:
