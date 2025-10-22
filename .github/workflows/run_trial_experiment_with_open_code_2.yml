@@ -18,6 +18,10 @@ on:
         required: true
         default: 'anthropic/claude-sonnet-4-5-20250929'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   id-token: write
   contents: write
