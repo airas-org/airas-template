@@ -36,14 +36,10 @@ jobs:
             exit 0
           fi
 
-          img_dir="$research_dir/iteration${latest}/images"
-          if [ ! -d "$img_dir" ]; then
-            echo "No images directory found at $img_dir"
-            exit 0
-          fi
+          iter_dir="$research_dir/iteration${latest}"
+          echo "Looking for PDFs in $iter_dir subdirectories"
 
-          echo "Looking for PDFs in $img_dir"
-          for pdf in "$img_dir"/*.pdf; do
+          find "$iter_dir" -mindepth 2 -maxdepth 2 -type f -name "*.pdf" | while read pdf; do
             name=$(basename "$pdf" .pdf)
             echo "Converting $pdf to PNG..."
             pdftoppm "$pdf" "$tmp_dir/${name}" -png

@@ -82,6 +82,24 @@ jobs:
       - name: Install bun
         run: npm install -g bun
 
+      - name: Copy experiment images to LaTeX directory
+        run: |
+          LATEST_ITER=$(ls -d .research/iteration* 2>/dev/null | sort -V | tail -n 1)
+
+          if [ -z "$LATEST_ITER" ]; then
+            echo "No iteration directories found, skipping image copy"
+            exit 0
+          fi
+
+          echo "Copying images from $LATEST_ITER"
+          mkdir -p "${LATEX_DIR}/images"
+
+          find "$LATEST_ITER" -mindepth 2 -maxdepth 2 -type f -name "*.pdf" \
+            -exec cp {} "${LATEX_DIR}/images/" \;
+
+          echo "Image copy completed. Files in images/:"
+          ls -la "${LATEX_DIR}/images/" || echo "No images found"
+
       - name: OpenCode Autonomous LaTeX Fix and Compile Loop
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

@@ -1,4 +1,4 @@
-name: Run Trial Experiment with Open Code
+name: Run Trial Experiment with Open Code (v1)
 
 on:
   workflow_dispatch:
