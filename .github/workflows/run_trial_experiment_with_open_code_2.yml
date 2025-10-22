@@ -154,9 +154,6 @@ jobs:
         Any attempt to run the experiment code will fail and lead to incorrect conclusions. Your sole responsibility is to **modify the code to make it runnable**. 
         The actual experiment will be executed in a separate, GPU-enabled environment after your corrections.
 
-        Before you start your correction, FIRST, 
-        execute the command `git log --grep="\[CI\] Automated fix for run_id=${{ needs.setup.outputs.current_run_id }}" -n 1 -p` to review the specific commit that contains the previous failed attempt to fix the code.
-
         ERROR INFORMATION:
         The error logs are available in the file: $RESULTS_DIR/error_summary.txt
         Read this file to understand what went wrong. DO NOT read stdout.txt or stderr.txt as they contain verbose training logs.
