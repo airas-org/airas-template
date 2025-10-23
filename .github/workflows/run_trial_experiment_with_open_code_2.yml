@@ -104,7 +104,7 @@ jobs:
             uv run python -u -m src.main \
               run=$RUN_ID \
               results_dir="$RESULTS_DIR" \
-              trial_mode=true
+              mode=trial
             echo -e "=== [TRIAL RUN] PASSED for $RUN_ID at $(date -u) ===\n"
           )> >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
 

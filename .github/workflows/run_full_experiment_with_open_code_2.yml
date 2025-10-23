@@ -34,6 +34,7 @@ jobs:
 
     env:
       RESULTS_DIR: ".research/iteration${{ github.event.inputs.experiment_iteration }}"
+      WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
 
     steps:
       - name: Checkout repository
@@ -63,8 +64,8 @@ jobs:
             echo "=== [FULL EXPERIMENT] Start for ${{ github.event.inputs.run_id }} at $(date -u) ==="
             uv run python -u -m src.main \
               run=${{ github.event.inputs.run_id }} \
-              wandb.mode=online \
-              results_dir="$RESULTS_DIR"
+              results_dir="$RESULTS_DIR" \
+              mode=full
             echo "=== [FULL EXPERIMENT] PASSED for ${{ github.event.inputs.run_id }} at $(date -u) ==="
           ) > >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
 
@@ -167,7 +168,6 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
         run: |
           for i in {1..10}; do
             opencode run --model "${{ github.event.inputs.model_name }}" "$PROMPT" && break
