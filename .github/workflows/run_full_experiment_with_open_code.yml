@@ -43,6 +43,7 @@ jobs:
 
         uv run python -m src.main \
           run=${{ github.event.inputs.run_id  }} \
+          wandb.mode=online \
           results_dir="$RESULTS_DIR" \
           > >(tee -a "$RESULTS_DIR/stdout.txt") \
           2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)

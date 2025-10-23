@@ -63,6 +63,7 @@ jobs:
             echo "=== [FULL EXPERIMENT] Start for ${{ github.event.inputs.run_id }} at $(date -u) ==="
             uv run python -u -m src.main \
               run=${{ github.event.inputs.run_id }} \
+              wandb.mode=online \
               results_dir="$RESULTS_DIR"
             echo "=== [FULL EXPERIMENT] PASSED for ${{ github.event.inputs.run_id }} at $(date -u) ==="
           ) > >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)

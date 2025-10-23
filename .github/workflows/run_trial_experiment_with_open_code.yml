@@ -41,7 +41,6 @@ jobs:
         uv run python -m src.main \
           run=${RUN_ID_PLACEHOLDER} \
           results_dir="$RESULTS_DIR" \
-          wandb.mode=disabled \
           trial_mode=true \
           > >(tee -a "$RESULTS_DIR/stdout.txt") \
           2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
