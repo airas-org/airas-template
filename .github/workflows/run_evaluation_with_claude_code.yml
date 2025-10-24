@@ -54,13 +54,15 @@ jobs:
               - Per-run figures in `$RESULTS_DIR/{run_id}/*.pdf` (or .png)
               - Comparison figures in `$RESULTS_DIR/comparison/*.pdf` (or .png)
 
-            b. Read and analyze EACH figure for visual quality issues:
-              - Font sizes: Are axis labels, titles, legends readable? (not too small/large)
-              - Scale consistency: Do comparison plots use consistent Y-axis ranges?
-              - Color distinction: Are different lines/bars easily distinguishable?
-              - Layout: Is tight_layout applied? Are elements overlapping?
-              - Annotations: Are important values annotated on the figures?
-              - Resolution: Is the figure clear and publication-quality?
+            b. Read and analyze EACH figure by directly viewing the PDF/PNG files (do NOT use JSON files):
+              - Use the Read tool to open and view each generated PDF/PNG file
+              - Visually inspect each figure for quality issues:
+                - Font sizes: Are axis labels, titles, legends readable? (not too small/large)
+                - Scale consistency: Do comparison plots use consistent Y-axis ranges?
+                - Color distinction: Are different lines/bars easily distinguishable?
+                - Layout: Is tight_layout applied? Are elements overlapping?
+                - Annotations: Are important values annotated on the figures?
+                - Resolution: Is the figure clear and publication-quality?
 
             c. If ANY figure has visual quality issues:
               - Identify the specific problem (e.g., "font size too small", "inconsistent Y-axis scales")
