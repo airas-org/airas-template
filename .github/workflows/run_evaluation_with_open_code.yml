@@ -9,6 +9,9 @@ on:
       experiment_iteration:
         description: "Iteration count"
         required: true
+      model_name:
+        description: "Model to use for opencode"
+        default: 'anthropic/claude-sonnet-4-5-20250929'
 
 permissions:
   id-token: write

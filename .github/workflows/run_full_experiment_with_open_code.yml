@@ -15,7 +15,6 @@ on:
         default: '["ubuntu-latest"]'
       model_name:
         description: "Model to use for opencode"
-        required: true
         default: 'anthropic/claude-sonnet-4-5-20250929'
 
 permissions:

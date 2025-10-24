@@ -14,8 +14,7 @@ on:
         required: true
         default: '["ubuntu-latest"]'
       model_name:
-        description: "Model to use"
-        required: true
+        description: "Model to use for opencode"
         default: 'anthropic/claude-sonnet-4-5-20250929'
 
 concurrency:
