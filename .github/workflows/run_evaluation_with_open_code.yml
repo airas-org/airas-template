@@ -47,7 +47,6 @@ jobs:
         Procedure:
         1.  Initial Setup: First, run `bash -c "$SYNC_COMMAND"` to install dependencies.
         2.  Run Evaluation: Execute `bash -c "$EVALUATION_COMMAND"`.
-            While it runs, you MUST monitor progress by checking the tail of the output log.
         3.  Analyze & Fix Loop: If evaluation fails, you MUST analyze the error, use your tools to fix the code, and then re-run evaluation. Repeat this cycle until it succeeds.
             A successful run is only confirmed when a message starting with `=== [EVALUATION] PASSED` is present in the output log.
         4. Visual Quality Check: Once evaluation succeeds, you MUST:
