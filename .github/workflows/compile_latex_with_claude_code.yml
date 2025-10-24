@@ -1,4 +1,4 @@
-name: Compile LaTeX with Open Code
+name: Compile LaTeX with Claude Code
 
 on:
   workflow_dispatch:
@@ -70,18 +70,6 @@ jobs:
             texlive-latex-extra \
             texlive-science
 
-      - name: Setup Node.js Environment
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install bun
-        run: npm install -g bun
-
-      - name: Install opencode
-        run: |
-          curl -fsSL https://opencode.ai/install | bash
-
       - name: Copy experiment images to LaTeX directory
         run: |
           LATEST_ITER=$(ls -d .research/iteration* 2>/dev/null | sort -V | tail -n 1)
@@ -100,20 +88,12 @@ jobs:
           echo "Image copy completed. Files in images/:"
           ls -la "${LATEX_DIR}/images/" || echo "No images found"
 
-      - name: OpenCode Autonomous LaTeX Fix and Compile Loop
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          for i in {1..10}; do
-            opencode run --model "${{ github.event.inputs.model_name }}" "$PROMPT" && break
-            if [ $i -lt 10 ]; then
-              echo "Attempt $i failed with exit code $?. Retrying in $((2**i)) seconds..."
-              sleep $((2**i))
-            else
-              echo "All 10 attempts failed."
-              exit 1
-            fi
-          done
+      - name: Claude Code Autonomous Run, Fix, and Validate Loop
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: ${{ env.PROMPT }}
+          claude_args: "--max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite"
 
       - name: Move compiled PDF to .research/
         run: |
