@@ -6,6 +6,9 @@ on:
       subdir:
         description: 'Subdirectory under .research/latex/ (e.g., iclr2025)'
         required: true
+      iteration_id:
+        description: "Iteration ID to use"
+        required: true
       model_name:
         description: "Model to use for opencode"
         default: 'anthropic/claude-sonnet-4-5-20250929'
@@ -87,17 +90,18 @@ jobs:
 
       - name: Copy experiment images to LaTeX directory
         run: |
-          LATEST_ITER=$(ls -d .research/iteration* 2>/dev/null | sort -V | tail -n 1)
+          ITER_DIR=".research/iteration${{ inputs.iteration_id }}"
+          echo "Using iteration: $ITER_DIR"
 
-          if [ -z "$LATEST_ITER" ]; then
-            echo "No iteration directories found, skipping image copy"
-            exit 0
+          if [ ! -d "$ITER_DIR" ]; then
+            echo "Iteration directory $ITER_DIR not found."
+            exit 1
           fi
 
-          echo "Copying images from $LATEST_ITER"
+          echo "Copying images from $ITER_DIR"
           mkdir -p "${LATEX_DIR}/images"
 
-          find "$LATEST_ITER" -mindepth 2 -maxdepth 2 -type f -name "*.pdf" \
+          find "$ITER_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.pdf" \
             -exec cp {} "${LATEX_DIR}/images/" \;
 
           echo "Image copy completed. Files in images/:"

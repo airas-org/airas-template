@@ -2,6 +2,10 @@ name: Prepare Images for HTML
 
 on:
   workflow_dispatch:
+    inputs:
+      iteration_id:
+        description: "Iteration ID to use"
+        required: true
 
 jobs:
   convert-and-upload:
@@ -30,16 +34,17 @@ jobs:
             exit 0
           fi
 
-          latest=$(ls "$research_dir" | grep '^iteration[0-9]\+$' | sed 's/iteration//' | sort -n | tail -n1 || true)
-          if [ -z "$latest" ]; then
-            echo "No iteration directories found"
-            exit 0
+          ITER_DIR=".research/iteration${{ inputs.iteration_id }}"
+          echo "Using iteration: $ITER_DIR"
+
+          if [ ! -d "$ITER_DIR" ]; then
+            echo "Iteration directory $ITER_DIR not found."
+            exit 1
           fi
 
-          iter_dir="$research_dir/iteration${latest}"
-          echo "Looking for PDFs in $iter_dir subdirectories"
+          echo "Looking for PDFs in $ITER_DIR subdirectories"
 
-          find "$iter_dir" -mindepth 2 -maxdepth 2 -type f -name "*.pdf" | while read pdf; do
+          find "$ITER_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.pdf" | while read pdf; do
             name=$(basename "$pdf" .pdf)
             echo "Converting $pdf to PNG..."
             pdftoppm "$pdf" "$tmp_dir/${name}" -png
