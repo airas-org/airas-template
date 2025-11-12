@@ -197,8 +197,8 @@ jobs:
           
           cat "$RESULTS_DIR/error_summary.txt"
 
-      - name: Claude Code Autonomous Run, Fix, and Validate Loop
-        uses: anthropics/claude-code-action@v1
+      - name: Claude Code Run (with 3 retries)
+        uses: ./.github/actions/retry-claude
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}

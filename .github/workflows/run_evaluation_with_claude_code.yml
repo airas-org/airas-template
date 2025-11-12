@@ -100,8 +100,8 @@ jobs:
           mkdir -p "$iteration_dir"
           echo "RESULTS_DIR=$iteration_dir" >> "$GITHUB_ENV"
 
-      - name: Claude Code Autonomous Run, Fix, and Validate Loop
-        uses: anthropics/claude-code-action@v1
+      - name: Claude Code Run (with 3 retries)
+        uses: ./.github/actions/retry-claude
         env:
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
         with:
