@@ -1,3 +1,5 @@
+# Currently, composite actions cannot utilize timeout‗minutes for each step.
+
 name: "Retry Claude Code Action (3 attempts)"
 description: "Run anthropics/claude-code-action@v1 up to 3 times with retry logic"
 

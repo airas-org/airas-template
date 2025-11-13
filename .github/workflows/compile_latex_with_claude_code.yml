@@ -92,12 +92,47 @@ jobs:
           echo "Image copy completed. Files in images/:"
           ls -la "${LATEX_DIR}/images/" || echo "No images found"
 
-      - name: Claude Code Run (with 3 retries)
-        uses: ./.github/actions/retry-claude
+      # This is a temporary workaround until composite actions support timeout-minutes.
+      - name: Claude Code Run (Attempt 1)
+        id: claude_run_1
+        continue-on-error: true
+        timeout-minutes: 10
+        uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: ${{ env.PROMPT }}
-          claude_args: "--max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite"
+          claude_args: --max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite
+
+      - name: Claude Code Run (Attempt 2)
+        id: claude_run_2
+        if: steps.claude_run_1.outcome == 'failure'
+        continue-on-error: true
+        timeout-minutes: 10
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: ${{ env.PROMPT }}
+          claude_args: --max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite
+
+      - name: Claude Code Run (Attempt 3)
+        id: claude_run_3
+        if: steps.claude_run_2.outcome == 'failure'
+        continue-on-error: true
+        timeout-minutes: 10
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: ${{ env.PROMPT }}
+          claude_args: --max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite
+
+      - name: Check if all attempts failed
+        if: |
+          steps.claude_run_1.outcome == 'failure' &&
+          steps.claude_run_2.outcome == 'failure' &&
+          steps.claude_run_3.outcome == 'failure'
+        run: |
+          echo "❌ Claude Code failed after 3 attempts"
+          exit 1
 
       - name: Move compiled PDF to .research/
         run: |

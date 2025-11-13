@@ -100,14 +100,44 @@ jobs:
           mkdir -p "$iteration_dir"
           echo "RESULTS_DIR=$iteration_dir" >> "$GITHUB_ENV"
 
-      - name: Claude Code Run (with 3 retries)
-        uses: ./.github/actions/retry-claude
+      # This is a temporary workaround until composite actions support timeout-minutes.
+      - name: Claude Code Run (Attempt 1)
+        id: claude_run_1
+        continue-on-error: true
+        timeout-minutes: 10
+        uses: anthropics/claude-code-action@v1
         env:
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: ${{ env.PROMPT }}
-          claude_args: "--max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite"
+          claude_args: --max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite
+
+      - name: Claude Code Run (Attempt 2)
+        id: claude_run_2
+        if: steps.claude_run_1.outcome == 'failure'
+        continue-on-error: true
+        timeout-minutes: 10
+        uses: anthropics/claude-code-action@v1
+        env:
+          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: ${{ env.PROMPT }}
+          claude_args: --max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite
+
+      - name: Claude Code Run (Attempt 3)
+        id: claude_run_3
+        if: steps.claude_run_2.outcome == 'failure'
+        continue-on-error: true
+        timeout-minutes: 10
+        uses: anthropics/claude-code-action@v1
+        env:
+          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: ${{ env.PROMPT }}
+          claude_args: --max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite
 
       - name: Commit and push evaluation results
         if: always()
