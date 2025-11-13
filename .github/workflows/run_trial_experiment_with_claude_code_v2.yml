@@ -239,6 +239,15 @@ jobs:
           prompt: ${{ env.PROMPT }}
           claude_args: --max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite
 
+      - name: Check if all attempts failed
+        if: |
+          steps.claude_run_1.outcome == 'failure' &&
+          steps.claude_run_2.outcome == 'failure' &&
+          steps.claude_run_3.outcome == 'failure'
+        run: |
+          echo "❌ Claude Code failed after 3 attempts"
+          exit 1
+
       - name: Commit and push fix
         run: |
           git config --local user.name "github-actions[bot]"
