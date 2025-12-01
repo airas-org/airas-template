@@ -160,7 +160,7 @@ jobs:
         The actual experiment will be executed in a separate, GPU-enabled environment after your corrections.
 
         ERROR INFORMATION:
-        The error logs are available in the file: ${{ env.RESULTS_DIR }}/error_summary.txt
+        The error logs are available in the file: .research/results/error_summary.txt
         Read this file to understand what went wrong. DO NOT read stdout.txt or stderr.txt as they contain verbose training logs.
 
         Guiding Principles:
