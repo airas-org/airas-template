@@ -1,4 +1,4 @@
-name: Run Full Experiment with Claude Code (v2)
+name: Run Full Experiment with Claude Code
 
 on:
   workflow_dispatch:
@@ -6,15 +6,12 @@ on:
       run_id:
         description: "The specific run_id for the full experiment"
         required: true
-      experiment_iteration:
-        description: "Iteration count"
-        required: true
-      runner_type:
-        description: 'Runner type (e.g., ["ubuntu-latest"], ["self-hosted", "A100"])'
+      runner_label:
+        description: 'Runner label (e.g., ["ubuntu-latest"], ["self-hosted", "A100"])'
         required: true
         default: '["ubuntu-latest"]'
       model_name:
-        description: "Model to use for opencode"
+        description: "Model to use for claudecode"
         required: true
         default: 'anthropic/claude-sonnet-4-5-20250929'
 
@@ -22,6 +19,9 @@ permissions:
   id-token: write
   contents: write
   actions: write
+
+env:
+  RESULTS_DIR: ".research/results"
 
 # Why jobs are split into `run-experiment` and `fix-and-rerun`:
 # 1. Runner Stability: The AI agent (fix-and-rerun) is kept on a CPU runner to prevent
@@ -33,14 +33,13 @@ permissions:
 jobs:
   run-experiment:
     name: Run Full Experiment
-    runs-on: ${{ fromJSON(github.event.inputs.runner_type) }}
+    runs-on: ${{ fromJSON(github.event.inputs.runner_label) }}
     timeout-minutes: 6000
 
     outputs:
       experiment_passed: ${{ steps.check-result.outputs.passed }}
 
     env:
-      RESULTS_DIR: ".research/iteration${{ github.event.inputs.experiment_iteration }}"
       WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
 
     steps:
@@ -103,7 +102,6 @@ jobs:
     timeout-minutes: 60
 
     env: 
-      RESULTS_DIR: ".research/iteration${{ github.event.inputs.experiment_iteration }}"
       SEARCH_HF_COMMAND: |
         curl -s -G \
           -H "Authorization: Bearer $HF_TOKEN" \
@@ -194,8 +192,7 @@ jobs:
           echo "Re-running workflow"
           gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
             -f run_id="${{ github.event.inputs.run_id }}" \
-            -f experiment_iteration="${{ github.event.inputs.experiment_iteration }}" \
-            -f runner_type='${{ github.event.inputs.runner_type }}' \
+            -f runner_label='${{ github.event.inputs.runner_label }}' \
             -f model_name='${{ github.event.inputs.model_name }}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -206,9 +203,6 @@ jobs:
       runs-on: ubuntu-latest
       needs: run-experiment
       if: needs.run-experiment.outputs.experiment_passed == 'true'
-
-      env:
-        RESULTS_DIR: ".research/iteration${{ github.event.inputs.experiment_iteration }}"
 
       steps:
         - name: Checkout repository
@@ -229,7 +223,7 @@ jobs:
             git add .research/
             
             if ! git diff --staged --quiet; then
-              git commit -m "[CI] Commit all changes from autonomous run (iteration ${{ github.event.inputs.experiment_iteration }})"
+              git commit -m "[CI] Commit all changes from autonomous run (${{ env.RESULTS_DIR }})"
               for i in {1..5}; do
                 git pull --rebase && git push && break
                 echo "Push failed on attempt $i. Retrying in $((2**i)) seconds..."

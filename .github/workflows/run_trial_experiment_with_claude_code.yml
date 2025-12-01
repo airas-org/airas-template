@@ -6,8 +6,8 @@ on:
       run_ids:
         description: 'A JSON array of run_ids to process'
         required: true
-      runner_type:
-        description: 'Runner type (e.g., ["ubuntu-latest"], ["self-hosted", "A100"])'
+      runner_label:
+        description: 'Runner label (e.g., ["ubuntu-latest"], ["self-hosted", "A100"])'
         required: true
         default: '["ubuntu-latest"]'
       model_name:
@@ -72,7 +72,7 @@ jobs:
     name: Run Trial for ${{ needs.setup.outputs.current_run_id }}
     needs: setup
     if: needs.setup.outputs.is_empty == 'false'
-    runs-on: ${{ fromJSON(github.event.inputs.runner_type) }}
+    runs-on: ${{ fromJSON(github.event.inputs.runner_label) }}
     timeout-minutes: 120
 
     outputs:
@@ -160,7 +160,7 @@ jobs:
         The actual experiment will be executed in a separate, GPU-enabled environment after your corrections.
 
         ERROR INFORMATION:
-        The error logs are available in the file: .research/results/error_summary.txt
+        The error logs are available in the file: $RESULTS_DIR/error_summary.txt
         Read this file to understand what went wrong. DO NOT read stdout.txt or stderr.txt as they contain verbose training logs.
 
         Guiding Principles:
@@ -231,7 +231,7 @@ jobs:
           echo "Re-running workflow"
           gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
             -f run_ids='${{ github.event.inputs.run_ids }}' \
-            -f runner_type='${{ github.event.inputs.runner_type }}' \
+            -f runner_label='${{ github.event.inputs.runner_label }}' \
             -f model_name='${{ github.event.inputs.model_name }}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -279,7 +279,7 @@ jobs:
             echo "Triggering next run with remaining run_ids: $REMAINING_IDS"
             gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
               -f run_ids="$REMAINING_IDS" \
-              -f runner_type='${{ github.event.inputs.runner_type }}' \
+              -f runner_label='${{ github.event.inputs.runner_label }}' \
               -f model_name='${{ github.event.inputs.model_name }}'
           fi
         env:

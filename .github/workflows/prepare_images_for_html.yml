@@ -2,10 +2,9 @@ name: Prepare Images for HTML
 
 on:
   workflow_dispatch:
-    inputs:
-      iteration_id:
-        description: "Iteration ID to use"
-        required: true
+
+env:
+  RESULTS_DIR: ".research/results"
 
 jobs:
   convert-and-upload:
@@ -27,36 +26,34 @@ jobs:
           set -e
           tmp_dir="/tmp/output_images"
           mkdir -p "$tmp_dir"
-          research_dir=".research"
 
-          if [ ! -d "$research_dir" ]; then
-            echo "Directory $research_dir not found."
+          if [ ! -d "$RESULTS_DIR" ]; then
+            echo "Directory $RESULTS_DIR not found. No results to process."
             exit 0
           fi
 
-          ITER_DIR=".research/iteration${{ inputs.iteration_id }}"
-          echo "Using iteration: $ITER_DIR"
+          echo "Looking for PDFs in $RESULTS_DIR recursively..."
 
-          if [ ! -d "$ITER_DIR" ]; then
-            echo "Iteration directory $ITER_DIR not found."
-            exit 1
-          fi
-
-          echo "Looking for PDFs in $ITER_DIR subdirectories"
-
-          find "$ITER_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.pdf" | while read pdf; do
+          find "$RESULTS_DIR" -type f -name "*.pdf" | while read pdf; do
             name=$(basename "$pdf" .pdf)
             echo "Converting $pdf to PNG..."
             pdftoppm "$pdf" "$tmp_dir/${name}" -png
           done
 
-          for png in $tmp_dir/*-1.png; do
-            base=$(basename "$png" -1.png)
-            mv "$png" "$tmp_dir/${base}.png"
-          done
+          if ls "$tmp_dir"/*-1.png 1> /dev/null 2>&1; then
+            for png in "$tmp_dir"/*-1.png; do
+              base=$(basename "$png" -1.png)
+              mv "$png" "$tmp_dir/${base}.png"
+            done
+          fi
 
       - name: Copy converted PNGs to gh-pages branch
         run: |
+          if [ -z "$(ls -A /tmp/output_images/*.png 2>/dev/null)" ]; then
+            echo "No PNG images were generated."
+            exit 0
+          fi
+
           git fetch origin gh-pages || git branch gh-pages
           git checkout gh-pages
 
