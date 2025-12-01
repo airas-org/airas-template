@@ -1,13 +1,10 @@
-name: Run Trial Experiment with Claude Code (v2)
+name: Run Trial Experiment with Claude Code
 
 on:
   workflow_dispatch:
     inputs:
       run_ids:
         description: 'A JSON array of run_ids to process'
-        required: true
-      experiment_iteration:
-        description: "Iteration count"
         required: true
       runner_type:
         description: 'Runner type (e.g., ["ubuntu-latest"], ["self-hosted", "A100"])'
@@ -30,6 +27,9 @@ permissions:
 defaults:
   run:
     shell: bash
+
+env:
+  RESULTS_DIR: ".research/results"
 
 # Why jobs are split into `run-experiment` and `fix-and-rerun`:
 # 1. Runner Stability: The AI agent (fix-and-rerun) is kept on a CPU runner to prevent
@@ -79,7 +79,6 @@ jobs:
       experiment_passed: ${{ steps.check-result.outputs.passed }}
     
     env:
-      RESULTS_DIR: ".research/iteration${{ github.event.inputs.experiment_iteration }}"
       RUN_ID: ${{ needs.setup.outputs.current_run_id }}
 
     steps:
@@ -142,7 +141,6 @@ jobs:
     timeout-minutes: 60
 
     env:
-      RESULTS_DIR: ".research/iteration${{ github.event.inputs.experiment_iteration }}"
       SEARCH_HF_COMMAND: |
         curl -s -G \
           -H "Authorization: Bearer $HF_TOKEN" \
@@ -162,7 +160,7 @@ jobs:
         The actual experiment will be executed in a separate, GPU-enabled environment after your corrections.
 
         ERROR INFORMATION:
-        The error logs are available in the file: $RESULTS_DIR/error_summary.txt
+        The error logs are available in the file: ${{ env.RESULTS_DIR }}/error_summary.txt
         Read this file to understand what went wrong. DO NOT read stdout.txt or stderr.txt as they contain verbose training logs.
 
         Guiding Principles:
@@ -233,7 +231,6 @@ jobs:
           echo "Re-running workflow"
           gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
             -f run_ids='${{ github.event.inputs.run_ids }}' \
-            -f experiment_iteration="${{ github.event.inputs.experiment_iteration }}" \
             -f runner_type='${{ github.event.inputs.runner_type }}' \
             -f model_name='${{ github.event.inputs.model_name }}'
         env:
@@ -245,9 +242,6 @@ jobs:
     needs: [setup, run-trial-experiment]
     if: needs.setup.outputs.is_empty == 'false' && needs.run-trial-experiment.outputs.experiment_passed == 'true'
     runs-on: ubuntu-latest
-
-    env: 
-      RESULTS_DIR: ".research/iteration${{ github.event.inputs.experiment_iteration }}"
 
     steps:
       - name: Checkout repository
@@ -285,7 +279,6 @@ jobs:
             echo "Triggering next run with remaining run_ids: $REMAINING_IDS"
             gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
               -f run_ids="$REMAINING_IDS" \
-              -f experiment_iteration="${{ github.event.inputs.experiment_iteration }}" \
               -f runner_type='${{ github.event.inputs.runner_type }}' \
               -f model_name='${{ github.event.inputs.model_name }}'
           fi
