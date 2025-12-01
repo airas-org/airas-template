@@ -1,4 +1,3 @@
-
 name: Run Evaluation with Claude Code
 
 on:
@@ -6,9 +5,6 @@ on:
     inputs:
       run_ids:
         description: 'A JSON array of run_ids to process'
-        required: true
-      experiment_iteration:
-        description: "Iteration count"
         required: true
 
 permissions:
@@ -18,6 +14,9 @@ permissions:
 defaults:
   run:
     shell: bash
+
+env:
+  RESULTS_DIR: ".research/results"
 
 jobs:
   autonomous-evaluation-and-fix:
@@ -96,10 +95,7 @@ jobs:
           enable-cache: false
 
       - name: Prepare results dir
-        run: |
-          iteration_dir=".research/iteration${{ github.event.inputs.experiment_iteration }}"
-          mkdir -p "$iteration_dir"
-          echo "RESULTS_DIR=$iteration_dir" >> "$GITHUB_ENV"
+        run: mkdir -p "$RESULTS_DIR"
 
       - name: Run Claude Code
         timeout-minutes: 20
@@ -133,7 +129,7 @@ jobs:
           git add --update .
 
           if ! git diff --staged --quiet; then
-            git commit -m "[CI] Commit evaluation results (iteration ${{ github.event.inputs.experiment_iteration }})"
+            git commit -m "[CI] Commit evaluation results (${{ env.RESULTS_DIR }})"
             for i in {1..5}; do
               git pull --rebase && git push && break
               echo "Push failed on attempt $i. Retrying in $((2**i)) seconds..."
@@ -148,7 +144,6 @@ jobs:
         run: |
           echo "Retrying workflow due to evaluation failure."
           gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
-            -f run_ids='${{ github.event.inputs.run_ids }}' \
-            -f experiment_iteration='${{ github.event.inputs.experiment_iteration }}'
+            -f run_ids='${{ github.event.inputs.run_ids }}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
