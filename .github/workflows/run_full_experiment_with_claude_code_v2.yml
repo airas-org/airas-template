@@ -97,7 +97,7 @@ jobs:
 
   fix-and-rerun:
     name: Fix and Re-run
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event.inputs.runner_type) }}
     needs: run-experiment
     if: needs.run-experiment.outputs.experiment_passed == 'false'
     timeout-minutes: 60
