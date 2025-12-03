@@ -41,7 +41,7 @@ defaults:
 jobs:
   setup:
     name: Setup for Sequential Run
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event.inputs.runner_type) }}
     outputs:
       current_run_id: ${{ steps.parse.outputs.current_run_id }}
       remaining_run_ids: ${{ steps.parse.outputs.remaining_run_ids }}
@@ -138,7 +138,7 @@ jobs:
     name: Fix and Re-run Trial
     needs: [setup, run-trial-experiment]
     if: needs.setup.outputs.is_empty == 'false' && needs.run-trial-experiment.outputs.experiment_passed == 'false'
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event.inputs.runner_type) }}
     timeout-minutes: 60
 
     env:
