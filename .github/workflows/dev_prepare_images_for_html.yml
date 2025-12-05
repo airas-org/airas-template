@@ -1,4 +1,4 @@
-name: Prepare Images for HTML
+name: "[Dev] Prepare Images for HTML"
 
 on:
   workflow_dispatch:

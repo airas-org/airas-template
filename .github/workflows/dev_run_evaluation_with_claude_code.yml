@@ -1,4 +1,4 @@
-name: Run Evaluation with Claude Code
+name: "[Dev] Run Evaluation with Claude Code"
 
 on:
   workflow_dispatch:

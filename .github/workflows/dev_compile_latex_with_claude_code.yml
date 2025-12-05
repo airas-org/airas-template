@@ -1,4 +1,4 @@
-name: Compile LaTeX with Claude Code
+name: "[Dev] Compile LaTeX with Claude Code"
 
 on:
   workflow_dispatch:
