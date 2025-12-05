@@ -6,6 +6,11 @@ on:
       subdir:
         description: 'Subdirectory under .research/latex/ (e.g., iclr2025)'
         required: true
+      paper_name:
+        description: 'Desired output PDF filename without extension (e.g., generated_paper)'
+        required: true
+        default: 'generated_paper'
+
 
 permissions:
   id-token: write
@@ -14,9 +19,6 @@ permissions:
 defaults:
   run:
     shell: bash
-
-env:
-  RESULTS_DIR: ".research/results"
 
 jobs:
   autonomous-latex-fix-and-compile:
@@ -29,14 +31,18 @@ jobs:
       CHKTEX_COMMAND: |
         set -e
         echo "=== [PHASE 1/2] Running ChkTeX... ==="
-        chktex -q paper.tex
+        chktex -q main.tex
       COMPILE_COMMAND: |
         set -e
         echo "=== [PHASE 2/2] Compiling LaTeX document... ==="
-        pdflatex -interaction=nonstopmode paper.tex
-        bibtex paper
-        pdflatex -interaction=nonstopmode paper.tex
-        pdflatex -interaction=nonstopmode paper.tex
+        pdflatex -interaction=nonstopmode main.tex
+
+        if [ -f "main.aux" ]; then
+           bibtex main || echo "Bibtex warning ignored"
+        fi
+
+        pdflatex -interaction=nonstopmode main.tex
+        pdflatex -interaction=nonstopmode main.tex
       PROMPT: |
         You are a fully autonomous AI assistant specializing in LaTeX document correction.
         Your task is to ensure the LaTeX paper is free of chktex warnings and compiles successfully into a PDF. You will achieve this by executing, analyzing, fixing, and re-validating the document.
@@ -51,7 +57,7 @@ jobs:
         Procedure:
         1.  Change Directory: First, change your working directory to `$LATEX_DIR`. All subsequent commands MUST be run from this directory.
         2.  Run ChkTeX: Execute the command `bash -c "$CHKTEX_COMMAND"`.
-        3.  Analyze & Fix ChkTeX: If the command fails, you MUST analyze the chktex warnings from the output, fix the `paper.tex` file, and repeat step 2 until it passes.
+        3.  Analyze & Fix ChkTeX: If the command fails, you MUST analyze the chktex warnings from the output, fix the `main.tex` file, and repeat step 2 until it passes.
         4.  Run LaTeX Compile: Once chktex passes, execute `bash -c "$COMPILE_COMMAND"`.
         5.  Analyze & Fix Compilation: If compilation fails, you MUST analyze the LaTeX errors (e.g., undefined control sequences, missing files, bad boxes), fix the `.tex` files, and repeat step 4 until it succeeds.
         6.  Completion: Once both phases are complete, the task is finished.
@@ -73,25 +79,6 @@ jobs:
             texlive-latex-extra \
             texlive-science
 
-      - name: Copy experiment images to LaTeX directory
-        run: |
-          SOURCE_DIR="$RESULTS_DIR"
-          echo "Using source directory: $SOURCE_DIR"
-
-          if [ ! -d "$SOURCE_DIR" ]; then
-            echo "Source directory $SOURCE_DIR not found."
-            exit 1
-          fi
-
-          echo "Copying images from $SOURCE_DIR"
-          mkdir -p "${LATEX_DIR}/images"
-
-          find "$SOURCE_DIR" -type f -name "*.pdf" \
-            -exec cp {} "${LATEX_DIR}/images/" \;
-
-          echo "Image copy completed. Files in images/:"
-          ls -la "${LATEX_DIR}/images/" || echo "No images found"
-
       - name: Run Claude Code
         timeout-minutes: 20
         continue-on-error: true
@@ -105,8 +92,9 @@ jobs:
         id: verify_pdf
         continue-on-error: true
         run: |
-          src="${LATEX_DIR}/paper.pdf"
-          dest=".research/paper.pdf"
+          src="${LATEX_DIR}/main.pdf"
+          dest=".research/${{ github.event.inputs.paper_name }}.pdf"
+
           if [ -f "$src" ]; then
             mv "$src" "$dest"
             echo "Successfully moved compiled PDF to $dest"
@@ -139,6 +127,7 @@ jobs:
         run: |
           echo "Retrying workflow due to compilation failure."
           gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
-            -f subdir='${{ github.event.inputs.subdir }}'
+            -f subdir='${{ github.event.inputs.subdir }}' \
+            -f paper_name='${{ github.event.inputs.paper_name }}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
