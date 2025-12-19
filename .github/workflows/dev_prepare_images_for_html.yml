@@ -71,6 +71,7 @@ jobs:
           if ! git diff --staged --quiet; then
             git commit -m "Upload PNGs from ${{ github.ref_name }}"
             for i in {1..5}; do
+              git pull --rebase -X theirs origin main
               git push && break
               echo "Push failed on attempt $i. Retrying in $((2**i)) seconds..."
               sleep $((2**i))

@@ -190,3 +190,8 @@ models/
 *.graph
 *.index
 *.pth
+*.aux
+*.bbl
+*.log
+*.out
+*.blg

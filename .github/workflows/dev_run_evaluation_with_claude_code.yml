@@ -131,7 +131,8 @@ jobs:
           if ! git diff --staged --quiet; then
             git commit -m "[CI] Commit evaluation results (${{ env.RESULTS_DIR }})"
             for i in {1..5}; do
-              git pull --rebase && git push && break
+              git pull --rebase -X theirs origin main
+              git push && break
               echo "Push failed on attempt $i. Retrying in $((2**i)) seconds..."
               sleep $((2**i))
             done

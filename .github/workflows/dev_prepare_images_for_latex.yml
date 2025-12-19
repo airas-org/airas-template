@@ -66,6 +66,7 @@ jobs:
             git commit -m "[CI] Prepare experiment images for ${{ github.event.inputs.subdir }}"
 
             for i in {1..5}; do
+              git pull --rebase -X theirs origin main
               git push && break
               echo "Push failed on attempt $i. Retrying in $((2**i)) seconds..."
               sleep $((2**i))
