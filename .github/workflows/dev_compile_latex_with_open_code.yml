@@ -1,4 +1,4 @@
-name: Compile LaTeX with Open Code
+name: "[Dev] Compile LaTeX with OpenCode"
 
 on:
   workflow_dispatch:
@@ -6,12 +6,15 @@ on:
       subdir:
         description: 'Subdirectory under .research/latex/ (e.g., iclr2025)'
         required: true
-      iteration_id:
-        description: "Iteration ID to use"
+      paper_name:
+        description: 'Desired output PDF filename without extension (e.g., generated_paper)'
         required: true
+        default: 'generated_paper'
       model_name:
-        description: "Model to use for opencode"
-        default: 'anthropic/claude-sonnet-4-5-20250929'
+        description: "Model to use"
+        required: true
+        default: 'openrouter/openai/gpt-5-nano'
+
 
 permissions:
   id-token: write
@@ -32,14 +35,18 @@ jobs:
       CHKTEX_COMMAND: |
         set -e
         echo "=== [PHASE 1/2] Running ChkTeX... ==="
-        chktex -q paper.tex
+        chktex -q main.tex
       COMPILE_COMMAND: |
         set -e
         echo "=== [PHASE 2/2] Compiling LaTeX document... ==="
-        pdflatex -interaction=nonstopmode paper.tex
-        bibtex paper
-        pdflatex -interaction=nonstopmode paper.tex
-        pdflatex -interaction=nonstopmode paper.tex
+        pdflatex -interaction=nonstopmode main.tex
+
+        if [ -f "main.aux" ]; then
+           bibtex main || echo "Bibtex warning ignored"
+        fi
+
+        pdflatex -interaction=nonstopmode main.tex
+        pdflatex -interaction=nonstopmode main.tex
       PROMPT: |
         You are a fully autonomous AI assistant specializing in LaTeX document correction.
         Your task is to ensure the LaTeX paper is free of chktex warnings and compiles successfully into a PDF. You will achieve this by executing, analyzing, fixing, and re-validating the document.
@@ -54,7 +61,7 @@ jobs:
         Procedure:
         1.  Change Directory: First, change your working directory to `$LATEX_DIR`. All subsequent commands MUST be run from this directory.
         2.  Run ChkTeX: Execute the command `bash -c "$CHKTEX_COMMAND"`.
-        3.  Analyze & Fix ChkTeX: If the command fails, you MUST analyze the chktex warnings from the output, fix the `paper.tex` file, and repeat step 2 until it passes.
+        3.  Analyze & Fix ChkTeX: If the command fails, you MUST analyze the chktex warnings from the output, fix the `main.tex` file, and repeat step 2 until it passes.
         4.  Run LaTeX Compile: Once chktex passes, execute `bash -c "$COMPILE_COMMAND"`.
         5.  Analyze & Fix Compilation: If compilation fails, you MUST analyze the LaTeX errors (e.g., undefined control sequences, missing files, bad boxes), fix the `.tex` files, and repeat step 4 until it succeeds.
         6.  Completion: Once both phases are complete, the task is finished.
@@ -76,56 +83,40 @@ jobs:
             texlive-latex-extra \
             texlive-science
 
-      - name: Setup Node.js Environment
-        uses: actions/setup-node@v4
+      - name: Run OpenCode to fix errors
+        uses: ./.github/actions/run-opencode
+        timeout-minutes: 10
+        continue-on-error: true
         with:
-          node-version: '20'
-
-      - name: Install bun
-        run: npm install -g bun
-
-      - name: Install opencode
-        run: |
-          curl -fsSL https://opencode.ai/install | bash
-
-      - name: Copy experiment images to LaTeX directory
-        run: |
-          ITER_DIR=".research/iteration${{ inputs.iteration_id }}"
-          echo "Using iteration: $ITER_DIR"
-
-          if [ ! -d "$ITER_DIR" ]; then
-            echo "Iteration directory $ITER_DIR not found."
-            exit 1
-          fi
-
-          echo "Copying images from $ITER_DIR"
-          mkdir -p "${LATEX_DIR}/images"
-
-          find "$ITER_DIR" -mindepth 2 -maxdepth 2 -type f -name "*.pdf" \
-            -exec cp {} "${LATEX_DIR}/images/" \;
-
-          echo "Image copy completed. Files in images/:"
-          ls -la "${LATEX_DIR}/images/" || echo "No images found"
-
-      - name: OpenCode Autonomous LaTeX Fix and Compile Loop
+          prompt: ${{ env.PROMPT }}
+          model_name: ${{ github.event.inputs.model_name }}
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          for i in {1..10}; do
-            opencode run --model "${{ github.event.inputs.model_name }}" "$PROMPT" && break
-            if [ $i -lt 10 ]; then
-              echo "Attempt $i failed with exit code $?. Retrying in $((2**i)) seconds..."
-              sleep $((2**i))
-            else
-              echo "All 10 attempts failed."
-              exit 1
-            fi
-          done
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_BASEURL: ${{ secrets.LANGFUSE_BASE_URL }}
 
-      - name: Move compiled PDF to .research/
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_VERSION: "2024-10-01-preview"
+
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Verify and Move compiled PDF
+        id: verify_pdf
+        continue-on-error: true
         run: |
-          src="${LATEX_DIR}/paper.pdf"
-          dest=".research/paper.pdf"
+          src="${LATEX_DIR}/main.pdf"
+          dest=".research/${{ github.event.inputs.paper_name }}.pdf"
+
           if [ -f "$src" ]; then
             mv "$src" "$dest"
             echo "Successfully moved compiled PDF to $dest"
@@ -134,7 +125,8 @@ jobs:
             exit 1
           fi
 
-      - name: Commit and push LaTeX outputs
+      - name: Commit and push LaTeX outputs (on success)
+        if: steps.verify_pdf.outcome == 'success'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
@@ -144,6 +136,7 @@ jobs:
           if ! git diff --staged --quiet; then
             git commit -m "[CI] Autonomous LaTeX fixes and compilation for ${{ github.event.inputs.subdir }}"
             for i in {1..5}; do
+              git pull --rebase -X theirs origin main
               git push && break
               echo "Push failed on attempt $i. Retrying in $((2**i)) seconds..."
               sleep $((2**i))
@@ -151,3 +144,13 @@ jobs:
           else
             echo "No changes were made by the agent."
           fi
+
+      - name: Trigger Workflow Re-run (on failure)
+        if: steps.verify_pdf.outcome == 'failure'
+        run: |
+          echo "Retrying workflow due to compilation failure."
+          gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
+            -f subdir='${{ github.event.inputs.subdir }}' \
+            -f paper_name='${{ github.event.inputs.paper_name }}'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

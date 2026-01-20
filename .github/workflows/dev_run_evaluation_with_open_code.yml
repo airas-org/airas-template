@@ -1,4 +1,4 @@
-name: Run Evaluation with Open Code
+name: "[Dev] Run Evaluation with OpenCode"
 
 on:
   workflow_dispatch:
@@ -6,12 +6,10 @@ on:
       run_ids:
         description: 'A JSON array of run_ids to process'
         required: true
-      experiment_iteration:
-        description: "Iteration count"
-        required: true
       model_name:
-        description: "Model to use for opencode"
-        default: 'anthropic/claude-sonnet-4-5-20250929'
+        description: "Model to use"
+        required: true
+        default: 'openrouter/openai/gpt-5-nano'
 
 permissions:
   id-token: write
@@ -20,6 +18,9 @@ permissions:
 defaults:
   run:
     shell: bash
+
+env:
+  RESULTS_DIR: ".research/results"
 
 jobs:
   autonomous-evaluation-and-fix:
@@ -98,41 +99,48 @@ jobs:
           enable-cache: false
 
       - name: Prepare results dir
-        run: |
-          iteration_dir=".research/iteration${{ github.event.inputs.experiment_iteration }}"
-          mkdir -p "$iteration_dir"
-          echo "RESULTS_DIR=$iteration_dir" >> "$GITHUB_ENV"
+        run: mkdir -p "$RESULTS_DIR"
 
-      - name: Setup Node.js Environment
-        uses: actions/setup-node@v4
+      - name: Run OpenCode to fix errors
+        uses: ./.github/actions/run-opencode
+        timeout-minutes: 10
+        continue-on-error: true
         with:
-          node-version: '20'
-
-      - name: Install bun
-        run: npm install -g bun
-
-      - name: Install opencode
-        run: |
-          curl -fsSL https://opencode.ai/install | bash
-
-      - name: OpenCode Autonomous Evaluation, Fix, and Validate Loop
+          prompt: ${{ env.PROMPT }}
+          model_name: ${{ github.event.inputs.model_name }}
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
-        run: |
-          for i in {1..10}; do
-            opencode run --model "${{ github.event.inputs.model_name }}" "$PROMPT" && break
-            if [ $i -lt 10 ]; then
-              echo "Attempt $i failed with exit code $?. Retrying in $((2**i)) seconds..."
-              sleep $((2**i))
-            else
-              echo "All 10 attempts failed."
-              exit 1
-            fi
-          done
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_BASEURL: ${{ secrets.LANGFUSE_BASE_URL }}
 
-      - name: Commit and push evaluation results
-        if: always()
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_VERSION: "2024-10-01-preview"
+
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Verify Evaluation Results
+        id: verify_results
+        continue-on-error: true
+        run: |
+          if find "$RESULTS_DIR" -type f -name "*.pdf" | read; then
+            echo "✅ Evaluation results found."
+          else
+            echo "❌ Evaluation results (figures) not found in $RESULTS_DIR. This attempt has failed."
+            exit 1
+          fi
+
+      - name: Commit and push evaluation results (on success)
+        if: steps.verify_results.outcome == 'success'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
@@ -141,12 +149,22 @@ jobs:
           git add --update .
 
           if ! git diff --staged --quiet; then
-            git commit -m "[CI] Commit evaluation results (iteration ${{ github.event.inputs.experiment_iteration }})"
+            git commit -m "[CI] Commit evaluation results (${{ env.RESULTS_DIR }})"
             for i in {1..5}; do
-              git pull --rebase && git push && break
+              git pull --rebase -X theirs origin main
+              git push && break
               echo "Push failed on attempt $i. Retrying in $((2**i)) seconds..."
               sleep $((2**i))
             done
           else
             echo "No changes were made by the agent or the evaluation."
           fi
+
+      - name: Trigger Workflow Re-run (on failure)
+        if: steps.verify_results.outcome == 'failure'
+        run: |
+          echo "Retrying workflow due to evaluation failure."
+          gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
+            -f run_ids='${{ github.event.inputs.run_ids }}'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,4 @@
-name: Run Trial Experiment with Open Code (v2)
+name: "[Dev] Run Trial Experiment with OpenCode"
 
 on:
   workflow_dispatch:
@@ -6,16 +6,14 @@ on:
       run_ids:
         description: 'A JSON array of run_ids to process'
         required: true
-      experiment_iteration:
-        description: "Iteration count"
-        required: true
-      runner_type:
-        description: 'Runner type (e.g., ["ubuntu-latest"], ["self-hosted", "A100"])'
+      runner_label:
+        description: 'Runner label (e.g., ["ubuntu-latest"], ["self-hosted", "A100"])'
         required: true
         default: '["ubuntu-latest"]'
       model_name:
-        description: "Model to use for opencode"
-        default: 'anthropic/claude-sonnet-4-5-20250929'
+        description: "Model to use"
+        required: true
+        default: 'openrouter/openai/gpt-5-nano'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -29,6 +27,16 @@ permissions:
 defaults:
   run:
     shell: bash
+
+env:
+  RESULTS_DIR: ".research/results"
+
+# Why jobs are split into `run-experiment` and `fix-and-rerun`:
+# 1. Runner Stability: The AI agent (fix-and-rerun) is kept on a CPU runner to prevent
+#    bus errors that can occur on GPU environments.
+# 2. Reliable Error Analysis: This separation ensures experiment logs are saved as artifacts
+#    upon failure. If run in a single job, the agent's retry logic could lose the
+#    original error context, making a fix impossible.
 
 jobs:
   setup:
@@ -64,14 +72,13 @@ jobs:
     name: Run Trial for ${{ needs.setup.outputs.current_run_id }}
     needs: setup
     if: needs.setup.outputs.is_empty == 'false'
-    runs-on: ${{ fromJSON(github.event.inputs.runner_type) }}
+    runs-on: ${{ fromJSON(github.event.inputs.runner_label) }}
     timeout-minutes: 120
 
     outputs:
       experiment_passed: ${{ steps.check-result.outputs.passed }}
     
     env:
-      RESULTS_DIR: ".research/iteration${{ github.event.inputs.experiment_iteration }}"
       RUN_ID: ${{ needs.setup.outputs.current_run_id }}
 
     steps:
@@ -125,6 +132,7 @@ jobs:
           name: trial-results-${{ github.run.id }}-${{ env.RUN_ID }}
           path: ${{ env.RESULTS_DIR }}
 
+
   fix-and-rerun:
     name: Fix and Re-run Trial
     needs: [setup, run-trial-experiment]
@@ -133,7 +141,6 @@ jobs:
     timeout-minutes: 60
 
     env:
-      RESULTS_DIR: ".research/iteration${{ github.event.inputs.experiment_iteration }}"
       SEARCH_HF_COMMAND: |
         curl -s -G \
           -H "Authorization: Bearer $HF_TOKEN" \
@@ -188,35 +195,33 @@ jobs:
           fi
           
           cat "$RESULTS_DIR/error_summary.txt"
-
-      - name: Setup Node.js Environment
-        uses: actions/setup-node@v4
+      
+      - name: Run OpenCode to fix errors
+        uses: ./.github/actions/run-opencode
+        timeout-minutes: 10
+        continue-on-error: true
         with:
-          node-version: '20'
-
-      - name: Install bun
-        run: npm install -g bun
-
-      - name: Install opencode
-        run: |
-          curl -fsSL https://opencode.ai/install | bash
-
-      - name: Run OpenCode Fix
+          prompt: ${{ env.PROMPT }}
+          model_name: ${{ github.event.inputs.model_name }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
-        run: |
-          for i in {1..10}; do
-            opencode run --model "${{ github.event.inputs.model_name }}" "$PROMPT" && break
-            if [ $i -lt 10 ]; then
-              echo "Attempt $i failed with exit code $?. Retrying in $((2**i)) seconds..."
-              sleep $((2**i))
-            else
-              echo "All 10 attempts failed."
-              exit 1
-            fi
-          done
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_BASEURL: ${{ secrets.LANGFUSE_BASE_URL }}
+
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_VERSION: "2024-10-01-preview"
+
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
 
       - name: Commit and push fix
         run: |
@@ -228,12 +233,13 @@ jobs:
           if ! git diff --staged --quiet; then
             git commit -m "[CI] Automated fix for run_id=${{ needs.setup.outputs.current_run_id }}"
             for i in {1..5}; do
-              git pull --rebase && git push && break
+              git pull --rebase -X theirs origin main
+              git push && break
               echo "Push failed on attempt $i. Retrying in $((2**i)) seconds..."
               sleep $((2**i))
             done
           else
-            echo "OpenCode made no changes to the code."
+            echo "Open Code made no changes to the code."
           fi
 
       - name: Trigger next iteration
@@ -241,20 +247,17 @@ jobs:
           echo "Re-running workflow"
           gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
             -f run_ids='${{ github.event.inputs.run_ids }}' \
-            -f experiment_iteration="${{ github.event.inputs.experiment_iteration }}" \
-            -f runner_type='${{ github.event.inputs.runner_type }}' \
+            -f runner_label='${{ github.event.inputs.runner_label }}' \
             -f model_name='${{ github.event.inputs.model_name }}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
   trigger-next-run:
     name: Trigger Next Run in Sequence
     needs: [setup, run-trial-experiment]
     if: needs.setup.outputs.is_empty == 'false' && needs.run-trial-experiment.outputs.experiment_passed == 'true'
     runs-on: ubuntu-latest
-
-    env: 
-      RESULTS_DIR: ".research/iteration${{ github.event.inputs.experiment_iteration }}"
 
     steps:
       - name: Checkout repository
@@ -292,8 +295,7 @@ jobs:
             echo "Triggering next run with remaining run_ids: $REMAINING_IDS"
             gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
               -f run_ids="$REMAINING_IDS" \
-              -f experiment_iteration="${{ github.event.inputs.experiment_iteration }}" \
-              -f runner_type='${{ github.event.inputs.runner_type }}' \
+              -f runner_label='${{ github.event.inputs.runner_label }}' \
               -f model_name='${{ github.event.inputs.model_name }}'
           fi
         env:
