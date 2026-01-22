@@ -95,23 +95,25 @@ runs:
     # NOTE: OpenCode's streaming output causes traces to be fragmented in Langfuse 
     - name: Run OpenCode
       shell: bash
+      env:                                                                                                                                 
+        OPENCODE_PROMPT: ${{ inputs.prompt }}
       run: |
         set -e
         MAX_RETRIES=${{ inputs.max_retries }}
 
-        for i in $(seq 1 "$MAX_RETRIES"); do
-          echo "OpenCode attempt $i/$MAX_RETRIES"
-          if opencode run --model "${{ inputs.model_name }}" "${{ inputs.prompt }}"; then
-            echo "OpenCode succeeded"
-            exit 0
+        for i in $(seq 1 "$MAX_RETRIES"); do                                                                                               
+          echo "OpenCode attempt $i/$MAX_RETRIES"                                                                                          
+          if opencode run --model "${{ inputs.model_name }}" "$OPENCODE_PROMPT"; then                                                      
+            echo "OpenCode succeeded"                                                                                                      
+            exit 0                                                                                                                         
           fi
 
-          if [ "$i" -lt "$MAX_RETRIES" ]; then
-            backoff=$((2**i))
-            echo "Attempt $i failed. Retrying in ${backoff}s..."
-            sleep "$backoff"
-          else
-            echo "::error::All $MAX_RETRIES OpenCode attempts failed"
-            exit 1
-          fi
+          if [ "$i" -lt "$MAX_RETRIES" ]; then                                                                                             
+            backoff=$((2**i))                                                                                                              
+            echo "Attempt $i failed. Retrying in ${backoff}s..."                                                                           
+            sleep "$backoff"                                                                                                               
+          else                                                                                                                             
+            echo "::error::All $MAX_RETRIES OpenCode attempts failed"                                                                      
+            exit 1                                                                                                                         
+          fi                                                                                                                               
         done
