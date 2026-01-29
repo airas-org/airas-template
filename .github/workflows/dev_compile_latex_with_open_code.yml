@@ -86,7 +86,6 @@ jobs:
 
       - name: Run OpenCode to fix errors
         uses: ./.github/actions/run-opencode
-        timeout-minutes: 10
         continue-on-error: true
         with:
           prompt: ${{ env.PROMPT }}
