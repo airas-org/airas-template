@@ -10,7 +10,10 @@ on:
         description: 'Desired output PDF filename without extension (e.g., generated_paper)'
         required: true
         default: 'generated_paper'
-
+      branch_name:
+        description: 'Branch name for upload paper pdf (e.g., main)'
+        required: true
+        default: 'main'
 
 permissions:
   id-token: write
@@ -117,7 +120,7 @@ jobs:
           if ! git diff --staged --quiet; then
             git commit -m "[CI] Autonomous LaTeX fixes and compilation for ${{ github.event.inputs.subdir }}"
             for i in {1..5}; do
-              git pull --rebase -X theirs origin main
+              git pull --rebase -X theirs origin ${{ github.event.inputs.branch_name }}
               git push && break
               echo "Push failed on attempt $i. Retrying in $((2**i)) seconds..."
               sleep $((2**i))
