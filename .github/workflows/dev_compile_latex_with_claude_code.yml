@@ -88,6 +88,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: ${{ env.PROMPT }}
           claude_args: "--max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite"
+          allowed_bots: github-actions
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
