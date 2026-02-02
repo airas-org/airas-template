@@ -26,7 +26,7 @@ jobs:
     name: Autonomous LaTeX Fix and Compile Cycle
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    
+
     env:
       LATEX_DIR: .research/latex/${{ github.event.inputs.subdir }}
       CHKTEX_COMMAND: |
@@ -85,12 +85,11 @@ jobs:
         continue-on-error: true
         uses: anthropics/claude-code-action@v1
         with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: ${{ env.PROMPT }}
           claude_args: "--max-turns=100 --allowed-tools Bash,Write,Edit,MultiEdit,TodoWrite"
           allowed_bots: github-actions
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - name: Verify and Move compiled PDF
         id: verify_pdf
