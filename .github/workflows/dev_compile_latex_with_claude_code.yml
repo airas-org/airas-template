@@ -135,6 +135,7 @@ jobs:
           echo "Retrying workflow due to compilation failure."
           gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
             -f subdir='${{ github.event.inputs.subdir }}' \
-            -f paper_name='${{ github.event.inputs.paper_name }}'
+            -f paper_name='${{ github.event.inputs.paper_name }}' \
+            -f branch_name='${{ github.event.inputs.branch_name }}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
