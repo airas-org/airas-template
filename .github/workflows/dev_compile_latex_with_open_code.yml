@@ -11,7 +11,7 @@ on:
         required: true
         default: 'generated_paper'
       branch_name:
-        description: 'Branch name for for upload paper pdf (e.g., main)'
+        description: 'Branch name for upload paper pdf (e.g., main)'
         required: true
         default: 'main'
       model_name:
