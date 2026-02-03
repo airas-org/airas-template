@@ -85,7 +85,7 @@ jobs:
             texlive-science
 
       - name: Run OpenCode to fix errors
-        uses: ./.github/actions/run-opencode
+        uses: ./.github/actions/run-open-code
         continue-on-error: true
         with:
           prompt: ${{ env.PROMPT }}
