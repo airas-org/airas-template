@@ -10,6 +10,10 @@ on:
         description: 'Desired output PDF filename without extension (e.g., generated_paper)'
         required: true
         default: 'generated_paper'
+      branch_name:
+        description: 'Branch name for upload paper pdf (e.g., main)'
+        required: true
+        default: 'main'
       model_name:
         description: "Model to use"
         required: true
@@ -30,7 +34,7 @@ jobs:
     name: Autonomous LaTeX Fix and Compile Cycle
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    
+
     env:
       LATEX_DIR: .research/latex/${{ github.event.inputs.subdir }}
       CHKTEX_COMMAND: |
@@ -136,7 +140,7 @@ jobs:
           if ! git diff --staged --quiet; then
             git commit -m "[CI] Autonomous LaTeX fixes and compilation for ${{ github.event.inputs.subdir }}"
             for i in {1..5}; do
-              git pull --rebase -X theirs origin main
+              git pull --rebase -X theirs origin ${{ github.event.inputs.branch_name }}
               git push && break
               echo "Push failed on attempt $i. Retrying in $((2**i)) seconds..."
               sleep $((2**i))
@@ -151,6 +155,7 @@ jobs:
           echo "Retrying workflow due to compilation failure."
           gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
             -f subdir='${{ github.event.inputs.subdir }}' \
-            -f paper_name='${{ github.event.inputs.paper_name }}'
+            -f paper_name='${{ github.event.inputs.paper_name }}' \
+            -f branch_name='${{ github.event.inputs.branch_name }}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
