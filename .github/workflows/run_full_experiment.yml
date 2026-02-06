@@ -24,6 +24,10 @@ on:
         description: 'Model to use (for OpenCode: openrouter/openai/gpt-5-nano, for Claude Code: sonnet/opus/haiku)'
         required: true
         default: 'sonnet'
+      retry_count:
+        description: 'Current retry attempt (internal use)'
+        required: false
+        default: '0'
 
 permissions:
   id-token: write
@@ -224,15 +228,33 @@ jobs:
             echo "AI agent made no changes to the code."
           fi
 
-      - name: Trigger next iteration
+      - name: Check retry limit
+        id: check-retry
         run: |
-          echo "Re-running workflow"
+          RETRY_COUNT=${{ github.event.inputs.retry_count }}
+          MAX_RETRIES=10
+          
+          if [ "$RETRY_COUNT" -ge "$MAX_RETRIES" ]; then
+            echo "Max retries ($MAX_RETRIES) reached. Failing workflow."
+            echo "should_retry=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          else
+            echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES"
+            echo "should_retry=true" >> "$GITHUB_OUTPUT"
+            echo "next_retry=$((RETRY_COUNT + 1))" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger next iteration
+        if: steps.check-retry.outputs.should_retry == 'true'
+        run: |
+          echo "Re-running workflow (attempt ${{ steps.check-retry.outputs.next_retry }})"
           gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
             -f branch_name='${{ github.event.inputs.branch_name }}' \
             -f run_id="${{ github.event.inputs.run_id }}" \
             -f runner_label='${{ github.event.inputs.runner_label }}' \
             -f github_actions_agent='${{ github.event.inputs.github_actions_agent }}' \
-            -f model_name='${{ github.event.inputs.model_name }}'
+            -f model_name='${{ github.event.inputs.model_name }}' \
+            -f retry_count='${{ steps.check-retry.outputs.next_retry }}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

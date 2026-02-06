@@ -26,6 +26,10 @@ on:
         description: 'Model to use (for OpenCode: openrouter/openai/gpt-5-nano, for Claude Code: sonnet/opus/haiku)'
         required: true
         default: 'sonnet'
+      retry_count:
+        description: 'Current retry attempt (internal use)'
+        required: false
+        default: '0'
 
 permissions:
   id-token: write
@@ -165,15 +169,33 @@ jobs:
             echo "No changes were made by the agent."
           fi
 
-      - name: Trigger Workflow Re-run (on failure)
+      - name: Check retry limit
         if: steps.verify_pdf.outcome == 'failure'
+        id: check-retry
         run: |
-          echo "Retrying workflow due to compilation failure."
+          RETRY_COUNT=${{ github.event.inputs.retry_count }}
+          MAX_RETRIES=5
+          
+          if [ "$RETRY_COUNT" -ge "$MAX_RETRIES" ]; then
+            echo "Max retries ($MAX_RETRIES) reached. Failing workflow."
+            echo "should_retry=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          else
+            echo "Retry attempt $RETRY_COUNT of $MAX_RETRIES"
+            echo "should_retry=true" >> "$GITHUB_OUTPUT"
+            echo "next_retry=$((RETRY_COUNT + 1))" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger Workflow Re-run (on failure)
+        if: steps.verify_pdf.outcome == 'failure' && steps.check-retry.outputs.should_retry == 'true'
+        run: |
+          echo "Retrying workflow due to compilation failure (attempt ${{ steps.check-retry.outputs.next_retry }})."
           gh workflow run "${{ github.workflow }}" --ref ${{ github.ref }} \
             -f branch_name='${{ github.event.inputs.branch_name }}' \
             -f subdir='${{ github.event.inputs.subdir }}' \
             -f paper_name='${{ github.event.inputs.paper_name }}' \
             -f github_actions_agent='${{ github.event.inputs.github_actions_agent }}' \
-            -f model_name='${{ github.event.inputs.model_name }}'
+            -f model_name='${{ github.event.inputs.model_name }}' \
+            -f retry_count='${{ steps.check-retry.outputs.next_retry }}'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
