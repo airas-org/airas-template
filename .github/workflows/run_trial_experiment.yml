@@ -271,7 +271,7 @@ jobs:
         id: check-retry
         run: |
           RETRY_COUNT=${{ github.event.inputs.retry_count }}
-          MAX_RETRIES=30
+          MAX_RETRIES=50
           
           if [ "$RETRY_COUNT" -ge "$MAX_RETRIES" ]; then
             echo "Max retries ($MAX_RETRIES) reached. Failing workflow."
