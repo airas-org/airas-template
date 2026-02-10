@@ -23,6 +23,9 @@ on:
           - pilot
           - main
         default: 'sanity'
+      research_topic:
+        description: 'Research topic or area of focus'
+        required: true
       research_hypothesis:
         description: 'Research hypothesis (JSON/YAML text)'
         required: true
@@ -103,6 +106,7 @@ jobs:
           PROMPT_PATH: .github/prompts/run_code_reviewer.md
           RUN_ID: ${{ github.event.inputs.run_id }}
           STAGE: ${{ github.event.inputs.run_stage }}
+          RESEARCH_TOPIC: ${{ github.event.inputs.research_topic }}
           RESEARCH_HYPOTHESIS: ${{ github.event.inputs.research_hypothesis }}
           EXPERIMENTAL_DESIGN: ${{ github.event.inputs.experimental_design }}
           WANDB_CONFIG: ${{ github.event.inputs.wandb_config }}
@@ -123,6 +127,8 @@ jobs:
             echo ""
             echo "STAGE: $STAGE"
             echo "RUN_ID: $RUN_ID"
+            echo "research_topic:"
+            printf "%s\n" "$RESEARCH_TOPIC"
             echo "research_hypothesis:"
             printf "%s\n" "$RESEARCH_HYPOTHESIS"
             echo "experimental_design:"

@@ -7,6 +7,9 @@ on:
         description: 'Branch name (e.g., main)'
         required: true
         default: 'main'
+      research_topic:
+        description: 'Research topic or area of focus'
+        required: true
       research_hypothesis:
         description: 'Research hypothesis (JSON/YAML text)'
         required: true
@@ -54,6 +57,7 @@ jobs:
         id: build-prompt
         env:
           PROMPT_PATH: .github/prompts/run_code_generator.md
+          RESEARCH_TOPIC: ${{ github.event.inputs.research_topic }}
           RESEARCH_HYPOTHESIS: ${{ github.event.inputs.research_hypothesis }}
           EXPERIMENTAL_DESIGN: ${{ github.event.inputs.experimental_design }}
           WANDB_CONFIG: ${{ github.event.inputs.wandb_config }}
@@ -68,6 +72,8 @@ jobs:
             cat "$PROMPT_PATH"
             echo ""
             echo "INPUT_DATA:"
+            echo "research_topic:"
+            printf "%s\n" "$RESEARCH_TOPIC"
             echo "research_hypothesis:"
             printf "%s\n" "$RESEARCH_HYPOTHESIS"
             echo "experimental_design:"
