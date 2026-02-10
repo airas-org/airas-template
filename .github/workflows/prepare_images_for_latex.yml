@@ -1,4 +1,4 @@
-name: "[Dev] Prepare Images for LaTeX"
+name: "Prepare Images for LaTeX"
 
 on:
   workflow_dispatch:

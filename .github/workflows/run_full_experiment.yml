@@ -1,4 +1,4 @@
-﻿name: "[Dev] Run Full Experiment"
+﻿name: "Run Full Experiment"
 
 on:
   workflow_dispatch:

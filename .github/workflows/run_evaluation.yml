@@ -1,4 +1,4 @@
-﻿name: "[Dev] Run Evaluation"
+﻿name: "Run Evaluation"
 
 on:
   workflow_dispatch:

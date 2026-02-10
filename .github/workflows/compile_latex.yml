@@ -1,4 +1,4 @@
-﻿name: "[Dev] Compile LaTeX"
+﻿name: "Compile LaTeX"
 
 on:
   workflow_dispatch:
