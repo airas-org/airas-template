@@ -31,7 +31,18 @@ runs:
     - name: Install OpenCode
       shell: bash
       run: |
-        curl -fsSL https://opencode.ai/install | bash
+        set -e
+        for i in 1 2 3 4 5; do
+          if curl -fsSL https://opencode.ai/install | bash; then
+            break
+          fi
+          if [ "$i" -lt 5 ]; then
+            sleep $((2**i))
+          else
+            echo "::error::OpenCode install failed after $i attempts"
+            exit 1
+          fi
+        done
         npm install opencode-plugin-langfuse
 
     # -----------------------------

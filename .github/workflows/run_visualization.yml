@@ -1,0 +1,92 @@
+name: "Run Visualization"
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch_name:
+        description: 'Branch name (e.g., main)'
+      run_ids:
+        description: 'A JSON array of run_ids to process'
+        required: true
+
+permissions:
+  id-token: write
+  contents: write
+  actions: write
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  RESULTS_DIR: ".research/results"
+
+jobs:
+  run-visualization:
+    name: Run Visualization
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch_name }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+          enable-cache: false
+
+      - name: Prepare results dir
+        run: mkdir -p "$RESULTS_DIR"
+
+      - name: Run evaluation
+        run: |
+          set -e
+          echo "=== [EVALUATION] Start at $(date -u) ==="
+          uv sync
+          uv run python -m src.evaluate \
+            results_dir="$RESULTS_DIR" \
+            run_ids='${{ github.event.inputs.run_ids }}'
+          echo "=== [EVALUATION] PASSED at $(date -u) ==="
+
+      - name: Verify evaluation results
+        run: |
+          if find "$RESULTS_DIR" -type f \( -name "*.pdf" -o -name "*.png" \) | read; then
+            echo "Evaluation results found."
+          else
+            echo "Evaluation results (figures) not found in $RESULTS_DIR."
+            exit 1
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visualization-results-${{ github.run.id }}
+          path: ${{ env.RESULTS_DIR }}
+
+      - name: Commit and push visualization results
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
+          git add "$RESULTS_DIR"
+          git add --update .
+
+          if ! git diff --staged --quiet; then
+            git commit -m "[CI] Commit visualization results (${{ env.RESULTS_DIR }})"
+            for i in {1..5}; do
+              git pull --rebase -X theirs origin ${{ github.event.inputs.branch_name }}
+              git push && break
+              echo "Push failed on attempt $i. Retrying in $((2**i)) seconds..."
+              sleep $((2**i))
+            done
+          else
+            echo "No changes from visualization."
+          fi
