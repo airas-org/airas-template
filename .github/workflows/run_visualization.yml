@@ -47,13 +47,21 @@ jobs:
 
       - name: Run visualization
         run: |
-          set -e
-          echo "=== [VISUALIZATION] Start at $(date -u) ==="
-          uv sync
-          uv run python -m src.evaluate \
-            results_dir="$RESULTS_DIR" \
-            run_ids='${{ github.event.inputs.run_ids }}'
-          echo "=== [VISUALIZATION] PASSED at $(date -u) ==="
+          trap 'sleep 1' EXIT
+          (
+            set -e
+            set -o pipefail
+
+            echo "=== [UV SYNC] Start at $(date -u) ==="
+            uv sync
+            echo "=== [UV SYNC] Finished successfully at $(date -u) ==="
+
+            echo "=== [VISUALIZATION] Start at $(date -u) ==="
+            uv run python -m src.evaluate \
+              results_dir="$RESULTS_DIR" \
+              run_ids='${{ github.event.inputs.run_ids }}'
+            echo "=== [VISUALIZATION] PASSED at $(date -u) ==="
+          ) > >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
 
       - name: Verify visualization results
         run: |
