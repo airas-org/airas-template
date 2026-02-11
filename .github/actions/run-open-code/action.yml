@@ -112,14 +112,14 @@ runs:
       run: |
         set -e
         
-        # Prepare prompt from file or inline
+        # Prepare prompt: reference file instead of embedding content
         if [ -n "${{ inputs.prompt_file }}" ]; then
           if [ ! -f "${{ inputs.prompt_file }}" ]; then
             echo "::error::Prompt file not found: ${{ inputs.prompt_file }}"
             exit 1
           fi
-          echo "Using prompt from file: ${{ inputs.prompt_file }}"
-          OPENCODE_PROMPT=$(cat "${{ inputs.prompt_file }}")
+          echo "Using prompt file reference: ${{ inputs.prompt_file }}"
+          OPENCODE_PROMPT="Please read and execute the instructions in the file: ${{ inputs.prompt_file }}"
         else
           echo "Using inline prompt"
           OPENCODE_PROMPT="${{ inputs.prompt }}"

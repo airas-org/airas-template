@@ -36,9 +36,9 @@ runs:
             echo "::error::Prompt file not found: ${{ inputs.prompt_file }}"
             exit 1
           fi
-          echo "Using prompt from file: ${{ inputs.prompt_file }}"
+          echo "Using prompt file reference: ${{ inputs.prompt_file }}"
           echo "CLAUDE_PROMPT<<EOF" >> $GITHUB_ENV
-          cat "${{ inputs.prompt_file }}" >> $GITHUB_ENV
+          echo "Please read and execute the instructions in the file: ${{ inputs.prompt_file }}" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
         else
           echo "Using inline prompt"
