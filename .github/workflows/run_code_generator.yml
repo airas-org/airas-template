@@ -1,4 +1,5 @@
 name: "Run Code Generator"
+run-name: "🤖 Code Generator"
 
 on:
   workflow_dispatch:

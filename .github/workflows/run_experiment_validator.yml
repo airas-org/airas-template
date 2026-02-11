@@ -1,5 +1,5 @@
 name: "Run Experiment Validator"
-run-name: "Validator [${{ inputs.run_stage }}]: ${{ inputs.run_id }}"
+run-name: "🤖 Validator [${{ inputs.run_stage }}]: ${{ inputs.run_id }}"
 
 on:
   workflow_dispatch:
