@@ -1,5 +1,5 @@
-name: "Run Code Reviewer"
-run-name: "Run Code Reviewer (stage: ${{ inputs.run_stage }}, run_id: ${{ inputs.run_id }})"
+name: "Run Experiment Validator"
+run-name: "Validator [${{ inputs.run_stage }}]: ${{ inputs.run_id }}"
 
 on:
   workflow_dispatch:
@@ -62,7 +62,7 @@ env:
 
 jobs:
   fix:
-    name: Review Results and Fix Code
+    name: Validate and Fix Experiment
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -103,7 +103,7 @@ jobs:
       - name: Build fix prompt
         id: build-prompt
         env:
-          PROMPT_PATH: .github/prompts/run_code_reviewer.md
+          PROMPT_PATH: .github/prompts/run_experiment_validator.md
           RUN_ID: ${{ github.event.inputs.run_id }}
           STAGE: ${{ github.event.inputs.run_stage }}
           RESEARCH_TOPIC: ${{ github.event.inputs.research_topic }}
@@ -146,7 +146,7 @@ jobs:
             printf '\n%s\n' "$DELIM"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Run Claude Code to fix errors
+      - name: Run Claude Code to validate and fix
         if: github.event.inputs.github_actions_agent == 'claude_code'
         uses: ./.github/actions/run-claude-code
         with:
@@ -159,7 +159,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
 
-      - name: Run OpenCode to fix errors
+      - name: Run OpenCode to validate and fix
         if: github.event.inputs.github_actions_agent == 'open_code'
         uses: ./.github/actions/run-open-code
         with:
@@ -185,8 +185,8 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
 
-      - name: Determine review action
-        id: review-action
+      - name: Determine validation action
+        id: validation-action
         env:
           RUN_ID: ${{ github.event.inputs.run_id }}
           RUN_STAGE: ${{ github.event.inputs.run_stage }}
@@ -197,17 +197,17 @@ jobs:
             ACTION="retry"
           fi
 
-          printf '{\n  "code_review_action": "%s",\n  "run_id": "%s",\n  "run_stage": "%s",\n  "workflow_run_id": "%s"\n}\n' \
-            "$ACTION" "$RUN_ID" "$RUN_STAGE" "$WORKFLOW_RUN_ID" > "$RESULTS_DIR/code_review_result.json"
+          printf '{\n  "validation_action": "%s",\n  "run_id": "%s",\n  "run_stage": "%s",\n  "workflow_run_id": "%s"\n}\n' \
+            "$ACTION" "$RUN_ID" "$RUN_STAGE" "$WORKFLOW_RUN_ID" > "$RESULTS_DIR/validation_result.json"
 
-          echo "code_review_action=$ACTION" >> "$GITHUB_OUTPUT"
+          echo "validation_action=$ACTION" >> "$GITHUB_OUTPUT"
 
-      - name: Upload review result
+      - name: Upload validation result
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reviewer-${{ github.run_id }}-${{ github.event.inputs.run_id }}
-          path: ${{ env.RESULTS_DIR }}/code_review_result.json
+          name: validator-${{ github.run_id }}-${{ github.event.inputs.run_id }}
+          path: ${{ env.RESULTS_DIR }}/validation_result.json
 
       - name: Commit and push fix
         run: |
@@ -217,7 +217,7 @@ jobs:
           git add config/ src/ pyproject.toml
 
           if ! git diff --staged --quiet; then
-            git commit -m "[CI] Code fix for run_id=${{ github.event.inputs.run_id }} using ${{ github.event.inputs.github_actions_agent }}"
+            git commit -m "[CI] Validation fix for run_id=${{ github.event.inputs.run_id }} using ${{ github.event.inputs.github_actions_agent }}"
             for i in {1..5}; do
               git pull --rebase -X theirs origin ${{ github.event.inputs.branch_name }}
               git push && break

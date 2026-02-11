@@ -1,5 +1,5 @@
 name: "Run Main Experiment"
-run-name: "Run Main Experiment (run_id: ${{ inputs.run_id }})"
+run-name: "Main Experiment: ${{ inputs.run_id }}"
 
 on:
   workflow_dispatch:

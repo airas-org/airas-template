@@ -1,5 +1,5 @@
 name: "Run Sanity Check"
-run-name: "Run Sanity Check (run_id: ${{ inputs.run_id }})"
+run-name: "Sanity Check: ${{ inputs.run_id }}"
 
 on:
   workflow_dispatch:
