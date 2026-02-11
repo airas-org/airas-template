@@ -6,8 +6,11 @@ inputs:
     description: "Model name (e.g. openrouter/openai/gpt-5-nano)"
     required: true
   prompt:
-    description: "Prompt passed to opencode"
-    required: true
+    description: "Prompt passed to opencode (ignored if prompt_file is provided)"
+    required: false
+  prompt_file:
+    description: "Path to file containing the prompt (alternative to prompt)"
+    required: false
   max_retries:
     description: 'Maximum number of retries'
     required: false
@@ -106,25 +109,37 @@ runs:
     # NOTE: OpenCode's streaming output causes traces to be fragmented in Langfuse 
     - name: Run OpenCode
       shell: bash
-      env:                                                                                                                                 
-        OPENCODE_PROMPT: ${{ inputs.prompt }}
       run: |
         set -e
+        
+        # Prepare prompt from file or inline
+        if [ -n "${{ inputs.prompt_file }}" ]; then
+          if [ ! -f "${{ inputs.prompt_file }}" ]; then
+            echo "::error::Prompt file not found: ${{ inputs.prompt_file }}"
+            exit 1
+          fi
+          echo "Using prompt from file: ${{ inputs.prompt_file }}"
+          OPENCODE_PROMPT=$(cat "${{ inputs.prompt_file }}")
+        else
+          echo "Using inline prompt"
+          OPENCODE_PROMPT="${{ inputs.prompt }}"
+        fi
+        
         MAX_RETRIES=${{ inputs.max_retries }}
 
-        for i in $(seq 1 "$MAX_RETRIES"); do                                                                                               
-          echo "OpenCode attempt $i/$MAX_RETRIES"                                                                                          
-          if opencode run --model "${{ inputs.model_name }}" "$OPENCODE_PROMPT"; then                                                      
-            echo "OpenCode succeeded"                                                                                                      
-            exit 0                                                                                                                         
+        for i in $(seq 1 "$MAX_RETRIES"); do
+          echo "OpenCode attempt $i/$MAX_RETRIES"
+          if opencode run --model "${{ inputs.model_name }}" "$OPENCODE_PROMPT"; then
+            echo "OpenCode succeeded"
+            exit 0
           fi
 
-          if [ "$i" -lt "$MAX_RETRIES" ]; then                                                                                             
-            backoff=$((2**i))                                                                                                              
-            echo "Attempt $i failed. Retrying in ${backoff}s..."                                                                           
-            sleep "$backoff"                                                                                                               
-          else                                                                                                                             
-            echo "::error::All $MAX_RETRIES OpenCode attempts failed"                                                                      
-            exit 1                                                                                                                         
-          fi                                                                                                                               
+          if [ "$i" -lt "$MAX_RETRIES" ]; then
+            backoff=$((2**i))
+            echo "Attempt $i failed. Retrying in ${backoff}s..."
+            sleep "$backoff"
+          else
+            echo "::error::All $MAX_RETRIES OpenCode attempts failed"
+            exit 1
+          fi
         done

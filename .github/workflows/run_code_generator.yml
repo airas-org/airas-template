@@ -69,6 +69,7 @@ jobs:
             exit 1
           fi
 
+          PROMPT_FILE="/tmp/code_generator_prompt.txt"
           {
             cat "$PROMPT_PATH"
             echo ""
@@ -81,20 +82,16 @@ jobs:
             printf "%s\n" "$EXPERIMENTAL_DESIGN"
             echo "wandb_config:"
             printf "%s\n" "$WANDB_CONFIG"
-          } > /tmp/codegen_prompt.txt
+          } > "$PROMPT_FILE"
 
-          DELIM="EOF_$(date +%s%N)"
-          {
-            echo "prompt<<$DELIM"
-            cat /tmp/codegen_prompt.txt
-            echo "$DELIM"
-          } >> "$GITHUB_OUTPUT"
+          echo "prompt_file=$PROMPT_FILE" >> "$GITHUB_OUTPUT"
+          echo "Prompt saved to: $PROMPT_FILE ($(wc -c < "$PROMPT_FILE") bytes)"
 
       - name: Run Claude Code for code generation
         if: github.event.inputs.github_actions_agent == 'claude_code'
         uses: ./.github/actions/run-claude-code
         with:
-          prompt: ${{ steps.build-prompt.outputs.prompt }}
+          prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
           model_name: ${{ github.event.inputs.model_name }}
           allowed_tools: '*'
           timeout_minutes: '15'
@@ -107,7 +104,7 @@ jobs:
         if: github.event.inputs.github_actions_agent == 'open_code'
         uses: ./.github/actions/run-open-code
         with:
-          prompt: ${{ steps.build-prompt.outputs.prompt }}
+          prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
           model_name: ${{ github.event.inputs.model_name }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}

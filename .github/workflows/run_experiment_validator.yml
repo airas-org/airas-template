@@ -100,7 +100,7 @@ jobs:
 
           cat "$RESULTS_DIR/error_summary.txt"
 
-      - name: Build fix prompt
+      - name: Build validation prompt
         id: build-prompt
         env:
           PROMPT_PATH: .github/prompts/run_experiment_validator.md
@@ -122,6 +122,7 @@ jobs:
             exit 1
           fi
 
+          PROMPT_FILE="/tmp/experiment_validator_prompt.txt"
           {
             cat "$PROMPT_PATH"
             echo ""
@@ -137,20 +138,16 @@ jobs:
             printf "%s\n" "$WANDB_CONFIG"
             echo "ERROR_SUMMARY:"
             cat "$ERROR_SUMMARY_PATH"
-          } > /tmp/code_fix_prompt.txt
+          } > "$PROMPT_FILE"
 
-          DELIM="PROMPT_EOF_$(date +%s%N)"
-          {
-            printf 'prompt<<%s\n' "$DELIM"
-            cat /tmp/code_fix_prompt.txt
-            printf '\n%s\n' "$DELIM"
-          } >> "$GITHUB_OUTPUT"
+          echo "prompt_file=$PROMPT_FILE" >> "$GITHUB_OUTPUT"
+          echo "Prompt saved to: $PROMPT_FILE ($(wc -c < "$PROMPT_FILE") bytes)"
 
       - name: Run Claude Code to validate and fix
         if: github.event.inputs.github_actions_agent == 'claude_code'
         uses: ./.github/actions/run-claude-code
         with:
-          prompt: ${{ steps.build-prompt.outputs.prompt }}
+          prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
           model_name: ${{ github.event.inputs.model_name }}
           allowed_tools: '*'
           timeout_minutes: '10'
@@ -163,7 +160,7 @@ jobs:
         if: github.event.inputs.github_actions_agent == 'open_code'
         uses: ./.github/actions/run-open-code
         with:
-          prompt: ${{ steps.build-prompt.outputs.prompt }}
+          prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
           model_name: ${{ github.event.inputs.model_name }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
