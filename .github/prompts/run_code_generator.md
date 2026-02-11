@@ -17,7 +17,10 @@ Tool Use:
 Allowed Files (fixed):
 - config/runs/*.yaml (new or updated run configs)
 - config/config.yaml
-- src/train.py, src/evaluate.py, src/preprocess.py, src/model.py, src/main.py
+- src/main.py, src/evaluate.py, src/preprocess.py
+- src/train.py (create/modify if training is required)
+- src/inference.py (create/modify if inference task is required)
+- src/model.py (create/modify if model definition is required)
 - pyproject.toml (dependencies only)
 
 
@@ -98,8 +101,9 @@ Sanity Validation (required):
 Required Outputs:
 - at least one config/runs/*.yaml
 - src/main.py, src/preprocess.py, src/evaluate.py
-- src/train.py (only if training is required)
-- src/model.py (only if model definition is required)
+- For training tasks: src/train.py (and src/model.py if custom model is needed)
+- For inference-only tasks: src/inference.py (and src/model.py if custom model is needed)
+- For other tasks: implement logic directly in src/main.py or create appropriate task-specific files
 
 src/train.py (if training is required):
 - Single run executor; invoked by main.py as a subprocess.
@@ -135,9 +139,10 @@ src/main.py:
 - Uses @hydra.main(config_path="../config") since execution is from repo root.
 - Determines task type from config and INPUT_DATA.
 - Applies mode overrides before invoking the appropriate script:
-	- For training tasks: invoke train.py
-	- For inference tasks: invoke inference.py or run inference logic directly
-	- For other tasks: execute task-specific logic as defined in INPUT_DATA
+	- For training tasks: invoke train.py as a subprocess
+	- For inference-only tasks: invoke inference.py as a subprocess
+	- For data analysis/prompt tuning tasks: implement logic directly or create appropriate helpers
+- Do not mix training and inference logic in main.py; keep it as an orchestrator only
 
 config/config.yaml:
 - Provide shared defaults and wandb settings.
