@@ -26,6 +26,33 @@ Allowed Files (fixed):
 - src/model.py (if exists and model definition is required)
 - pyproject.toml (dependencies only)
 
+Code Requirements:
+- Use Hydra to load configs from config/.
+- Use PyTorch exclusively (if deep learning is involved).
+- Preserve existing code structure and patterns when making fixes.
+
+Command Line Interface:
+- Execution:
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=main
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=sanity_check
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=pilot  # optional future use
+
+Mode Behavior:
+- sanity_check:
+	- For training: epochs=1, batches=1-2, wandb.mode=disabled, optuna.n_trials=0
+	- For inference: samples=5-10, wandb.mode=disabled
+	- For other tasks: minimal execution to verify functionality
+- main:
+	- For training: wandb.mode=online, full epochs, full optuna trials
+	- For inference: wandb.mode=online, full dataset
+	- For other tasks: full execution as specified in experimental_design
+
+File Structure:
+- src/main.py: Orchestrates a single run_id. Uses @hydra.main(config_path="../config"). Applies mode overrides before invoking train.py or inference.py as a subprocess.
+- src/train.py: Single run executor for training tasks; invoked by main.py.
+- src/inference.py: Single run executor for inference tasks; invoked by main.py.
+- src/evaluate.py: Independent script; not called from main.py.
+
 Sanity Check Expectations (STAGE=sanity):
 - Adapt validation to task type based on experimental_design:
   - Training tasks:
