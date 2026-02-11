@@ -67,7 +67,7 @@ jobs:
             uv run python -u -m src.main \
               run=${{ github.event.inputs.run_id }} \
               results_dir="$RESULTS_DIR" \
-              --main
+              mode=main
             echo "=== [MAIN EXPERIMENT] PASSED for ${{ github.event.inputs.run_id }} at $(date -u) ==="
           ) > >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
 

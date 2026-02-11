@@ -54,9 +54,9 @@ Experiment Code Requirements:
 
 Command Line Interface:
 - Execution:
-	- uv run python -u -m src.main run={run_id} results_dir={path} --main
-	- uv run python -u -m src.main run={run_id} results_dir={path} --sanity_check
-	- uv run python -u -m src.main run={run_id} results_dir={path} --pilot  # optional future use
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=main
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=sanity_check
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=pilot  # optional future use
 - Evaluation:
 	- uv run python -m src.evaluate results_dir={path} run_ids='["run-1", "run-2"]'
 
@@ -157,7 +157,7 @@ pyproject.toml:
 
 Basic Validation:
 - Ensure the following is runnable in sanity_check mode (syntax-level):
-	- uv run python -u -m src.main run={run_id} results_dir={path} --sanity_check
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=sanity_check
 - Ensure sanity_check mode prints SANITY_VALIDATION and SANITY_VALIDATION_SUMMARY lines.
 - Validation should succeed for the specific task type (training, inference, etc.).
 
