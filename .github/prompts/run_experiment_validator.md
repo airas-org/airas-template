@@ -30,6 +30,7 @@ Code Requirements:
 - Use Hydra to load configs from config/.
 - Use PyTorch exclusively (if deep learning is involved).
 - Preserve existing code structure and patterns when making fixes.
+- If different run_ids are processed due to different methods, ensure the method difference changes computation or evaluation and avoid reusing cached metrics/artifacts; identical numeric results across different methods should be treated as a bug unless inputs and processing are truly identical (rare).
 
 Command Line Interface:
 - Execution:

@@ -45,22 +45,22 @@ jobs:
       - name: Prepare results dir
         run: mkdir -p "$RESULTS_DIR"
 
-      - name: Run evaluation
+      - name: Run visualization
         run: |
           set -e
-          echo "=== [EVALUATION] Start at $(date -u) ==="
+          echo "=== [VISUALIZATION] Start at $(date -u) ==="
           uv sync
           uv run python -m src.evaluate \
             results_dir="$RESULTS_DIR" \
             run_ids='${{ github.event.inputs.run_ids }}'
-          echo "=== [EVALUATION] PASSED at $(date -u) ==="
+          echo "=== [VISUALIZATION] PASSED at $(date -u) ==="
 
-      - name: Verify evaluation results
+      - name: Verify visualization results
         run: |
           if find "$RESULTS_DIR" -type f \( -name "*.pdf" -o -name "*.png" \) | read; then
-            echo "Evaluation results found."
+            echo "Visualization results found."
           else
-            echo "Evaluation results (figures) not found in $RESULTS_DIR."
+            echo "Visualization results (figures) not found in $RESULTS_DIR."
             exit 1
           fi
 

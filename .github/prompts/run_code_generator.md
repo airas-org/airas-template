@@ -52,6 +52,7 @@ Experiment Code Requirements:
 - Use .cache/ as cache_dir for datasets/models.
 - WandB is required in full mode; disabled in trial mode.
 - Prevent data leakage: labels must not be part of inputs (if applicable).
+- Ensure method differences are reflected in computation and evaluation. If run_ids differ due to method changes, do not reuse cached metrics/artifacts and do not allow identical numeric results across different methods unless the inputs and processing are truly identical (which should be rare).
 - Ensure all required files listed below exist and are non-empty.
 - Adapt to task type: implement training logic only if INPUT_DATA requires training.
 
