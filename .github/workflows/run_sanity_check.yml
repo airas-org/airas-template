@@ -39,6 +39,22 @@ jobs:
       RUN_ID: ${{ github.event.inputs.run_id }}
 
     steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+          
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -89,5 +105,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sanity-${{ github.run_id }}-${{ env.RUN_ID }}
-          path: ${{ env.RESULTS_DIR }}
+          path: |
+            ${{ env.RESULTS_DIR }}/*.txt
+            ${{ env.RESULTS_DIR }}/*.json
+            ${{ env.RESULTS_DIR }}/*.log
 
