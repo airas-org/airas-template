@@ -10,18 +10,19 @@ on:
         default: 'main'
       run_id:
         description: 'Run ID to fix'
-        required: true
+        required: false
       workflow_run_id:
         description: 'Workflow run ID for the results'
         required: true
       run_stage:
-        description: 'Which stage produced the artifact (sanity, pilot, main)'
+        description: 'Which stage produced the artifact (sanity, pilot, main, visualization)'
         required: true
         type: choice
         options:
           - sanity
           - pilot
           - main
+          - visualization
         default: 'sanity'
       research_topic:
         description: 'Research topic or area of focus'
@@ -88,10 +89,21 @@ jobs:
         with:
           ref: ${{ github.event.inputs.branch_name }}
 
+      - name: Validate run_id for stage
+        run: |
+          if [ "${{ github.event.inputs.run_stage }}" != "visualization" ] && [ -z "${{ github.event.inputs.run_id }}" ]; then
+            echo "::error::run_id is required for stages other than visualization."
+            exit 1
+          fi
+
       - name: Resolve artifact name
         id: resolve-artifact
         run: |
-          echo "name=${{ github.event.inputs.run_stage }}-${{ github.event.inputs.workflow_run_id }}-${{ github.event.inputs.run_id }}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event.inputs.run_stage }}" = "visualization" ]; then
+            echo "name=${{ github.event.inputs.run_stage }}-${{ github.event.inputs.workflow_run_id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ github.event.inputs.run_stage }}-${{ github.event.inputs.workflow_run_id }}-${{ github.event.inputs.run_id }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Download stage results
         uses: actions/download-artifact@v4
