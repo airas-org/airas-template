@@ -69,6 +69,7 @@ Mode Behavior:
 	- For training: epochs=1, batches=1-2, wandb.mode=online, optuna.n_trials=0
 	- For inference: samples=5-10, wandb.mode=online
 	- For other tasks: minimal execution to verify functionality
+	- Use the same dataset and model as main runs; only reduce steps/samples.
 	- Use a separate W&B namespace to avoid polluting main runs: set wandb.project to "{project}-sanity" unless the config explicitly overrides.
 - main:
 	- For training: wandb.mode=online, full epochs, full optuna trials
