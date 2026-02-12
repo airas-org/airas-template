@@ -169,6 +169,34 @@ Basic Validation:
 - Ensure sanity_check mode prints SANITY_VALIDATION and SANITY_VALIDATION_SUMMARY lines.
 - Validation should succeed for the specific task type (training, inference, etc.).
 
+Syntax Validation After Generation:
+After generating or modifying code files, perform syntax checks before completing:
+
+1. **Python Files** - Validate all generated/modified .py files:
+   ```python
+   import ast
+   with open(file_path, 'r', encoding='utf-8') as f:
+       ast.parse(f.read())
+   ```
+   - Check: src/*.py (only files that exist)
+   
+2. **YAML Files** - Validate all generated/modified .yaml files:
+   ```python
+   import yaml
+   with open(file_path, 'r', encoding='utf-8') as f:
+       yaml.safe_load(f)
+   ```
+   - Check: config/config.yaml, config/runs/*.yaml
+   
+3. **TOML Files** - Validate pyproject.toml if modified:
+   ```python
+   import tomllib
+   with open('pyproject.toml', 'rb') as f:
+       tomllib.load(f)
+   ```
+
+If any syntax errors are found, immediately fix them and re-validate.
+
 Output:
 - Make code changes directly in the workspace.
 - Do not ask for permission; proceed autonomously.

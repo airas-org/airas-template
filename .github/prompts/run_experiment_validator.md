@@ -32,6 +32,20 @@ Code Requirements:
 - Use PyTorch exclusively (if deep learning is involved).
 - Preserve existing code structure and patterns when making fixes.
 - If different run_ids are processed due to different methods, ensure the method difference changes computation or evaluation and avoid reusing cached metrics/artifacts; identical numeric results across different methods should be treated as a bug unless inputs and processing are truly identical (rare).
+- When modifying code, always add comments in this format:
+  ```python
+  # [VALIDATOR FIX - Attempt {N}]
+  # [PROBLEM]: <what failed>
+  # [CAUSE]: <why it failed>
+  # [FIX]: <what you changed>
+  #
+  # [OLD CODE]:
+  # <original code commented out>
+  #
+  # [NEW CODE]:
+  <fixed code here>
+  ```
+  This preserves context for retry attempts and helps reviewers understand the fix.
 
 Command Line Interface:
 - Execution:
@@ -77,6 +91,39 @@ Sanity Check Expectations (STAGE=sanity):
 - Sanity mode prints:
   - SANITY_VALIDATION: PASS
   - SANITY_VALIDATION_SUMMARY: {...} (fields adapted to task type)
+
+Validation After Fix:
+After making code changes, perform targeted validation before completing:
+
+1. **Identify Fix Type** - Determine what was changed (examples):
+   - JSON/YAML parsing → Test parse operation on modified section
+   - Import statements → Verify import succeeds
+   - Function logic → Call function with minimal test input
+   - Config values → Validate config loads successfully
+   - Adapt test strategy based on actual fix type
+   
+2. **Run Pinpoint Test** - Execute only the modified code path:
+   ```python
+   # Example for JSON parse fix:
+   import json
+   json.loads(fixed_string)  # Verify it parses
+   
+   # Example for function fix:
+   result = fixed_function(test_input)  # Verify it runs without error
+   ```
+   - Timeout: 10 seconds max per test
+   - Use minimal data (1 sample, 1 iteration)
+   - Do not persist any outputs
+   
+3. **Report Test Result**:
+   - Print: VALIDATOR_TEST: [type=<fix_type>, result=PASS/FAIL, duration=<ms>]
+   - If PASS: Proceed to completion
+   - If FAIL: Report the error but do not rollback (let retry logic handle it)
+
+Skip validation if:
+- Changes are purely cosmetic (comments, whitespace)
+- No safe way to isolate the modified code path
+- Risk of side effects (file writes, API calls)
 
 Output:
 - Make code changes directly in the workspace.
