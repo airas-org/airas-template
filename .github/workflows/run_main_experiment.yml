@@ -33,6 +33,16 @@ jobs:
     timeout-minutes: 6000
 
     env:
+      # LLM inference experiments may use these provider keys.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
+      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
 
     outputs:

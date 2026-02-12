@@ -50,7 +50,7 @@ Experiment Code Requirements:
 - Use PyTorch exclusively (if deep learning is involved).
 - Use Hydra to load configs from config/.
 - Use .cache/ as cache_dir for datasets/models.
-- WandB is required in full mode; disabled in trial mode.
+- WandB is required in online modes; disable only when explicitly requested.
 - Prevent data leakage: labels must not be part of inputs (if applicable).
 - Ensure method differences are reflected in computation and evaluation. If run_ids differ due to method changes, do not reuse cached metrics/artifacts and do not allow identical numeric results across different methods unless the inputs and processing are truly identical (which should be rare).
 - Ensure all required files listed below exist and are non-empty.
@@ -62,13 +62,14 @@ Command Line Interface:
 	- uv run python -u -m src.main run={run_id} results_dir={path} mode=sanity_check
 	- uv run python -u -m src.main run={run_id} results_dir={path} mode=pilot  # optional future use
 - Evaluation:
-	- uv run python -m src.evaluate results_dir={path} run_ids='["run-1", "run-2"]'
+	- uv run python -u -m src.evaluate results_dir={path} run_ids='["run-1", "run-2"]'
 
 Mode Behavior:
 - sanity_check:
-	- For training: epochs=1, batches=1-2, wandb.mode=disabled, optuna.n_trials=0
-	- For inference: samples=5-10, wandb.mode=disabled
+	- For training: epochs=1, batches=1-2, wandb.mode=online, optuna.n_trials=0
+	- For inference: samples=5-10, wandb.mode=online
 	- For other tasks: minimal execution to verify functionality
+	- Use a separate W&B namespace to avoid polluting main runs: set wandb.project to "{project}-sanity" unless the config explicitly overrides.
 - main:
 	- For training: wandb.mode=online, full epochs, full optuna trials
 	- For inference: wandb.mode=online, full dataset
@@ -149,7 +150,7 @@ config/config.yaml:
 - Provide shared defaults and wandb settings.
 - Include:
 	- wandb.entity and wandb.project from input
-	- wandb.mode default as online (overridden by sanity_check)
+	- wandb.mode default as online
 
 src/preprocess.py and src/model.py:
 - Provide full implementations for datasets and models in experimental_design.

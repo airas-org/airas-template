@@ -14,4 +14,4 @@ results_dir: .research/results
 wandb:
   entity: ???
   project: ???
-  mode: online  # overridden to 'disabled' in sanity_check mode
+  mode: online

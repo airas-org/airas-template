@@ -156,6 +156,7 @@ jobs:
             echo ""
             echo "STAGE: $STAGE"
             echo "RUN_ID: $RUN_ID"
+            echo "RESULTS_DIR: $RESULTS_DIR"
             echo "research_topic:"
             printf "%s\n" "$RESEARCH_TOPIC"
             echo "research_hypothesis:"
