@@ -2,12 +2,12 @@
 # This file will be populated by AI code generator based on experimental design
 
 defaults:
-  - run: ???  # Required: specify via command line (e.g., run=proposed-bert-imdb)
+  - runs@run: ???  # Alias: loads from config/runs/, accessible as 'run=' in CLI
 
 # Execution mode: main, sanity_check, or pilot
 mode: main
 
-# Results directory (overridden via command line)
+# Results output directory
 results_dir: .research/results
 
 # WandB configuration (will be set by AI agent)
