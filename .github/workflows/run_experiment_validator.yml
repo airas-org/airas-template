@@ -48,6 +48,8 @@ on:
         description: 'Model to use (for OpenCode: openrouter/openai/gpt-5-nano, for Claude Code: sonnet/opus/haiku)'
         required: true
         default: 'sonnet'
+      # NOTE: Use prompt_path instead of passing prompt directly to avoid
+      # "Argument list too long" error in AI agent tools (OpenCode/ClaudeCode)
       prompt_path:
         description: 'Path to the prompt template file'
         required: false
@@ -72,6 +74,8 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      # NOTE: Free disk space to prevent "disk was full" errors during workflow execution
+      # (Error: Failed to create event.json because the disk was full)
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
         with:

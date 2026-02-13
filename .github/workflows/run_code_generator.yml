@@ -32,6 +32,8 @@ on:
         description: 'Model to use (for OpenCode: openrouter/openai/gpt-5-nano, for Claude Code: sonnet/opus/haiku)'
         required: true
         default: 'sonnet'
+      # NOTE: Use prompt_path instead of passing prompt directly to avoid
+      # "Argument list too long" error in AI agent tools (OpenCode/ClaudeCode)
       prompt_path:
         description: 'Path to the prompt template file'
         required: false
