@@ -112,6 +112,7 @@ jobs:
           docker run --rm $GPU_FLAGS \
             -v "$(pwd)/$RESULTS_DIR:/workspace/$RESULTS_DIR" \
             -e WANDB_API_KEY \
+            -e RESULTS_DIR="$RESULTS_DIR" \
             airas-experiment:latest \
             bash -c '
               set -e
