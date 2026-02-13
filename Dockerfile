@@ -17,15 +17,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv package manager
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.cargo/bin:${PATH}"
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Set working directory
 WORKDIR /workspace
 
 # Copy dependency files
 COPY pyproject.toml ./
-COPY uv.lock ./uv.lock 2>/dev/null || true
+# Copy uv.lock if it exists (wildcard makes it optional)
+COPY uv.lock* ./
 
 # Install Python dependencies using uv
 # This layer will be cached unless dependencies change

@@ -17,7 +17,7 @@ Tool Use:
 
 Allowed Files (fixed):
 - Dockerfile (repository root)
-- config/runs/*.yaml (new or updated run configs)
+- config/run/*.yaml (new or updated run configs)
 - config/config.yaml
 - src/main.py, src/evaluate.py, src/preprocess.py
 - src/train.py (create/modify if training is required)
@@ -29,7 +29,7 @@ Allowed Files (fixed):
 High-Level Plan:
 1. Parse INPUT_DATA and determine task type (training, inference, prompt tuning, etc.).
 2. Generate Dockerfile with required dependencies.
-3. Generate run configs in config/runs/*.yaml.
+3. Generate run configs in config/run/*.yaml.
 4. Implement the experiment code in src/.
 5. Update pyproject.toml dependencies if needed.
 6. Ensure required files exist and can run in sanity_check mode.
@@ -110,7 +110,7 @@ Sanity Validation (required):
 
 Required Outputs:
 - Dockerfile (repository root)
-- at least one config/runs/*.yaml
+- at least one config/run/*.yaml
 - src/main.py, src/preprocess.py, src/evaluate.py
 - For training tasks: src/train.py (and src/model.py if custom model is needed)
 - For inference-only tasks: src/inference.py (and src/model.py if custom model is needed)
@@ -199,7 +199,7 @@ After generating or modifying code files, perform syntax checks before completin
    with open(file_path, 'r', encoding='utf-8') as f:
        yaml.safe_load(f)
    ```
-   - Check: config/config.yaml, config/runs/*.yaml
+   - Check: config/config.yaml, config/run/*.yaml
 
 3. **TOML Files** - Validate pyproject.toml if modified:
    ```python

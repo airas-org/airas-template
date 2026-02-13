@@ -2,7 +2,8 @@
 # This file will be populated by AI code generator based on experimental design
 
 defaults:
-  - runs@run: ???  # Alias: loads from config/runs/, accessible as 'run=' in CLI
+  - _self_
+  - run: ???  # loads from config/run/, accessible as 'run=' in CLI
 
 # Execution mode: main, sanity_check, or pilot
 mode: main

@@ -124,8 +124,14 @@ jobs:
 
       - name: Extract error summary
         run: |
+          if [ -f "$RESULTS_DIR/docker_build.log" ]; then
+            echo "=== DOCKER BUILD LOG ===" > "$RESULTS_DIR/error_summary.txt"
+            cat "$RESULTS_DIR/docker_build.log" >> "$RESULTS_DIR/error_summary.txt"
+            echo "" >> "$RESULTS_DIR/error_summary.txt"
+          fi
+
           if [ -f "$RESULTS_DIR/stderr.txt" ]; then
-            echo "=== ERROR SUMMARY (Last 100 lines of stderr) ===" > "$RESULTS_DIR/error_summary.txt"
+            echo "=== ERROR SUMMARY (Last 100 lines of stderr) ===" >> "$RESULTS_DIR/error_summary.txt"
             tail -n 100 "$RESULTS_DIR/stderr.txt" >> "$RESULTS_DIR/error_summary.txt"
           fi
 

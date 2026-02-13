@@ -76,37 +76,52 @@ jobs:
           echo "has_docker=$has_docker" >> "$GITHUB_OUTPUT"
           echo "has_dockerfile=$has_dockerfile" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Docker Buildx
-        if: steps.check-docker.outputs.has_docker == 'true' && steps.check-docker.outputs.has_dockerfile == 'true'
-        uses: docker/setup-buildx-action@v3
+      - name: Prepare results dir
+        run: mkdir -p "$RESULTS_DIR"
 
       - name: Build Docker image
         if: steps.check-docker.outputs.has_docker == 'true' && steps.check-docker.outputs.has_dockerfile == 'true'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          tags: airas-experiment:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          load: true
+        id: build-docker
+        continue-on-error: true
+        run: |
+          (
+            set -e
+            echo "=== [DOCKER BUILD] Start at $(date -u) ==="
+            docker build -t airas-experiment:latest .
+            echo "=== [DOCKER BUILD] Success at $(date -u) ==="
+          ) 2>&1 | tee -a "$RESULTS_DIR/docker_build.log"
+
+          # Capture exit status
+          exit_status=${PIPESTATUS[0]}
+          if [ $exit_status -ne 0 ]; then
+            echo "::warning::Docker build failed (exit $exit_status), will fall back to native execution"
+            cat "$RESULTS_DIR/docker_build.log" >> "$RESULTS_DIR/stderr.txt"
+          fi
+          exit 0  # Always succeed to allow fallback
 
       - name: Install uv (fallback if no Docker)
-        if: steps.check-docker.outputs.has_docker == 'false' || steps.check-docker.outputs.has_dockerfile == 'false'
+        if: steps.check-docker.outputs.has_docker == 'false' || steps.check-docker.outputs.has_dockerfile == 'false' || steps.build-docker.outcome != 'success'
         uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"
 
-      - name: Prepare results dir
-        run: mkdir -p "$RESULTS_DIR"
-
       - name: Run sanity check (Docker)
-        if: steps.check-docker.outputs.has_docker == 'true' && steps.check-docker.outputs.has_dockerfile == 'true'
+        if: steps.check-docker.outputs.has_docker == 'true' && steps.check-docker.outputs.has_dockerfile == 'true' && steps.build-docker.outcome == 'success'
         id: run-exp-docker
         continue-on-error: true
         run: |
           trap 'sleep 1' EXIT
-          docker run --rm --gpus all \
+
+          # Check GPU availability
+          GPU_FLAGS=""
+          if nvidia-smi > /dev/null 2>&1; then
+            echo "GPU detected, enabling GPU support"
+            GPU_FLAGS="--gpus all"
+          else
+            echo "No GPU detected, running without GPU support"
+          fi
+
+          docker run --rm $GPU_FLAGS \
             -v "$(pwd)/$RESULTS_DIR:/workspace/$RESULTS_DIR" \
             -e ANTHROPIC_API_KEY \
             -e AWS_BEARER_TOKEN_BEDROCK \
@@ -128,7 +143,7 @@ jobs:
             ' > >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
 
       - name: Run sanity check (native)
-        if: steps.check-docker.outputs.has_docker == 'false' || steps.check-docker.outputs.has_dockerfile == 'false'
+        if: steps.check-docker.outputs.has_docker == 'false' || steps.check-docker.outputs.has_dockerfile == 'false' || steps.build-docker.outcome != 'success'
         id: run-exp-native
         continue-on-error: true
         run: |
