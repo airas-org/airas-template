@@ -52,10 +52,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
         with:
-          python-version: "3.11"
+          context: .
+          file: ./Dockerfile
+          tags: airas-experiment:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          load: true
 
       - name: Prepare results dir
         run: mkdir -p "$RESULTS_DIR"
@@ -65,21 +73,26 @@ jobs:
         continue-on-error: true
         run: |
           trap 'sleep 1' EXIT
-          (
-            set -e
-            set -o pipefail
-
-            echo "=== [UV SYNC] Start at $(date -u) ==="
-            uv sync
-            echo "=== [UV SYNC] Finished successfully at $(date -u) ==="
-
-            echo "=== [MAIN EXPERIMENT] Start for ${{ github.event.inputs.run_id }} at $(date -u) ==="
-            uv run python -u -m src.main \
-              run=${{ github.event.inputs.run_id }} \
-              results_dir="$RESULTS_DIR" \
-              mode=main
-            echo "=== [MAIN EXPERIMENT] PASSED for ${{ github.event.inputs.run_id }} at $(date -u) ==="
-          ) > >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
+          docker run --rm \
+            -v "$(pwd)/$RESULTS_DIR:/workspace/$RESULTS_DIR" \
+            -e ANTHROPIC_API_KEY \
+            -e AWS_BEARER_TOKEN_BEDROCK \
+            -e GEMINI_API_KEY \
+            -e HF_TOKEN \
+            -e LANGFUSE_BASE_URL \
+            -e LANGFUSE_PUBLIC_KEY \
+            -e LANGFUSE_SECRET_KEY \
+            -e OPENAI_API_KEY \
+            -e OPENROUTER_API_KEY \
+            -e WANDB_API_KEY \
+            airas-experiment:latest \
+            bash -c '
+              set -e
+              set -o pipefail
+              echo "=== [MAIN EXPERIMENT] Start for ${{ github.event.inputs.run_id }} at $(date -u) ==="
+              uv run python -u -m src.main run=${{ github.event.inputs.run_id }} results_dir="$RESULTS_DIR" mode=main
+              echo "=== [MAIN EXPERIMENT] PASSED for ${{ github.event.inputs.run_id }} at $(date -u) ==="
+            ' > >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
 
       - name: Check result
         id: check-result

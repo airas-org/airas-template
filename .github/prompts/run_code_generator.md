@@ -3,6 +3,7 @@ You are a code generation agent running in GitHub Actions.
 Task:
 - Use the INPUT_DATA section at the end of this prompt as the primary instruction.
 - Generate Hydra run configs and full experiment code based on the provided research/design data.
+- Generate a Dockerfile for reproducible execution environment.
 - Adapt to the task type in INPUT_DATA: training, inference-only, prompt tuning, data analysis, etc.
 
 Constraints:
@@ -15,6 +16,7 @@ Tool Use:
 - Prefer quick, non-destructive checks (syntax-level, lightweight runs) over long-running tasks.
 
 Allowed Files (fixed):
+- Dockerfile (repository root)
 - config/runs/*.yaml (new or updated run configs)
 - config/config.yaml
 - src/main.py, src/evaluate.py, src/preprocess.py
@@ -26,10 +28,15 @@ Allowed Files (fixed):
 
 High-Level Plan:
 1. Parse INPUT_DATA and determine task type (training, inference, prompt tuning, etc.).
-2. Generate run configs in config/runs/*.yaml.
-3. Implement the experiment code in src/.
-4. Update pyproject.toml dependencies if needed.
-5. Ensure required files exist and can run in sanity_check mode.
+2. Generate Dockerfile with required dependencies.
+3. Generate run configs in config/runs/*.yaml.
+4. Implement the experiment code in src/.
+5. Update pyproject.toml dependencies if needed.
+6. Ensure required files exist and can run in sanity_check mode.
+
+Dockerfile Generation:
+- Create Dockerfile in repository root using Python 3.11, install uv, copy pyproject.toml, run uv sync, copy source code.
+- Add task-specific system dependencies if needed (e.g., libsndfile1-dev for audio).
 
 Run Config Generation (Hydra):
 - Create one YAML per combination of (method, model, dataset).
@@ -102,6 +109,7 @@ Sanity Validation (required):
 	- Other: SANITY_VALIDATION_SUMMARY: {"operations":..., "status":...}
 
 Required Outputs:
+- Dockerfile (repository root)
 - at least one config/runs/*.yaml
 - src/main.py, src/preprocess.py, src/evaluate.py
 - For training tasks: src/train.py (and src/model.py if custom model is needed)
@@ -184,7 +192,7 @@ After generating or modifying code files, perform syntax checks before completin
        ast.parse(f.read())
    ```
    - Check: src/*.py (only files that exist)
-   
+
 2. **YAML Files** - Validate all generated/modified .yaml files:
    ```python
    import yaml
@@ -192,7 +200,7 @@ After generating or modifying code files, perform syntax checks before completin
        yaml.safe_load(f)
    ```
    - Check: config/config.yaml, config/runs/*.yaml
-   
+
 3. **TOML Files** - Validate pyproject.toml if modified:
    ```python
    import tomllib

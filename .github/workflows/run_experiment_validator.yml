@@ -82,7 +82,7 @@ jobs:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
           tool-cache: false
-          
+
           # all of these default to true, but feel free to set to
           # "false" if necessary for your workflow
           android: true
@@ -248,7 +248,7 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
-          git add config/ src/ pyproject.toml
+          git add Dockerfile config/ src/ pyproject.toml
 
           if ! git diff --staged --quiet; then
             git commit -m "[CI] Validation fix for run_id=${{ github.event.inputs.run_id }} using ${{ github.event.inputs.github_actions_agent }}"
