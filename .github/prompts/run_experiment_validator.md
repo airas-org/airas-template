@@ -5,7 +5,7 @@ Task:
 - Determine why the stage run failed or produced meaningless results, considering the intended experiment.
 - Fix the code to produce meaningful metrics. If STAGE is sanity, ensure sanity validation passes.
 - Adapt to the task type (training, inference, prompt tuning, data analysis, etc.) based on experimental_design.
-- If STAGE is visualization, locate generated figures (PDF/PNG) in results_dir and visually inspect them using available tools. Validate they are readable, non-empty, and match the expected content. If issues are found, fix the code and regenerate.
+- If STAGE is visualization, locate generated figures (PDF) in results_dir and visually inspect them using available tools. Validate they are readable, non-empty, and match the expected content. If issues are found, fix the code and regenerate.
 - If there are no errors and results appear normal, do not change any files.
 
 Constraints:

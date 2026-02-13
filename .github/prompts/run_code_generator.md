@@ -131,10 +131,15 @@ src/evaluate.py:
 - Load WandB config from the run config or environment variables.
 - For each run_id, fetch run history/summary/config from WandB API.
 - Export per-run metrics to {results_dir}/{run_id}/metrics.json.
-- Create per-run figures in {results_dir}/{run_id}/ with unique names.
+- Create per-run figures in {results_dir}/{run_id}/ as PDF format with unique names.
 - Export aggregated metrics to {results_dir}/comparison/aggregated_metrics.json with:
 	- primary_metric, metrics by run_id, best_proposed, best_baseline, gap
-- Generate comparison figures in {results_dir}/comparison/.
+- Generate comparison figures in {results_dir}/comparison/:
+	- For each common metric (e.g., loss, accuracy, f1_score), create a single plot that overlays all run_ids on the same axes.
+	- Use different colors and/or line styles for each run_id.
+	- Include a clear legend showing run_id labels.
+	- Save as PDF format (e.g., comparison_loss.pdf).
+	- Generate separate plots for training metrics vs. evaluation metrics if applicable.
 - Print all generated file paths to stdout.
 
 src/main.py:
