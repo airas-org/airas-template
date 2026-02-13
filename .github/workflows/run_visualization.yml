@@ -9,7 +9,7 @@ on:
         description: 'A JSON array of run_ids to process'
         required: true
       runner_label:
-        description: 'Runner label (e.g., ["ubuntu-latest"], ["self-hosted", "A100"])'
+        description: 'Runner label (e.g., ["ubuntu-latest"], ["self-hosted", "gpu-runner"])'
         required: false
         default: '["ubuntu-latest"]'
 

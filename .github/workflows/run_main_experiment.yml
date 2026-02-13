@@ -10,7 +10,7 @@ on:
         description: "The specific run_id for the main experiment"
         required: true
       runner_label:
-        description: 'Runner label (e.g., ["ubuntu-latest"], ["self-hosted", "A100"])'
+        description: 'Runner label (e.g., ["ubuntu-latest"], ["self-hosted", "gpu-runner"])'
         required: true
         default: '["ubuntu-latest"]'
 
