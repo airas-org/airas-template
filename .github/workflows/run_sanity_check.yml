@@ -152,7 +152,7 @@ jobs:
       - name: Check result
         id: check-result
         run: |
-          outcome="${{ steps.run-exp-docker.outcome }}${ steps.run-exp-native.outcome }}"
+          outcome="${{ steps.run-exp-docker.outcome }}${{ steps.run-exp-native.outcome }}"
           if [[ "$outcome" == *"success"* ]] \
             && grep -q "\[SANITY RUN\] PASSED" "$RESULTS_DIR/stdout.txt" \
             && grep -q "SANITY_VALIDATION: PASS" "$RESULTS_DIR/stdout.txt"; then
