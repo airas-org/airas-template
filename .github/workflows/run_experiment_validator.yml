@@ -114,13 +114,17 @@ jobs:
           fi
 
       - name: Download stage results
-        uses: actions/download-artifact@v4
+        uses: Wandalen/wretry.action@v3
         with:
-          name: ${{ steps.resolve-artifact.outputs.name }}
-          run-id: ${{ github.event.inputs.workflow_run_id }}
-          repository: ${{ github.repository }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path: ${{ env.RESULTS_DIR }}
+          action: actions/download-artifact@v4
+          with: |
+            name: ${{ steps.resolve-artifact.outputs.name }}
+            run-id: ${{ github.event.inputs.workflow_run_id }}
+            repository: ${{ github.repository }}
+            github-token: ${{ secrets.GITHUB_TOKEN }}
+            path: ${{ env.RESULTS_DIR }}
+          attempt_limit: 3
+          attempt_delay: 30000
 
       - name: Extract error summary
         run: |
@@ -188,23 +192,24 @@ jobs:
 
       - name: Run Claude Code to validate and fix
         if: github.event.inputs.github_actions_agent == 'claude_code'
-        uses: ./.github/actions/run-claude-code
-        with:
-          prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
-          model_name: ${{ github.event.inputs.model_name }}
-          allowed_tools: '*'
-          timeout_minutes: '10'
+        uses: Wandalen/wretry.action@v3
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+        with:
+          action: ./.github/actions/run-claude-code
+          with: |
+            prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
+            model_name: ${{ github.event.inputs.model_name }}
+            allowed_tools: '*'
+            timeout_minutes: '10'
+          attempt_limit: 3
+          attempt_delay: 30000
 
       - name: Run OpenCode to validate and fix
         if: github.event.inputs.github_actions_agent == 'open_code'
-        uses: ./.github/actions/run-open-code
-        with:
-          prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
-          model_name: ${{ github.event.inputs.model_name }}
+        uses: Wandalen/wretry.action@v3
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
@@ -224,6 +229,13 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+        with:
+          action: ./.github/actions/run-open-code
+          with: |
+            prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
+            model_name: ${{ github.event.inputs.model_name }}
+          attempt_limit: 3
+          attempt_delay: 30000
 
       - name: Determine validation action
         id: validation-action
@@ -244,10 +256,14 @@ jobs:
 
       - name: Upload validation result
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: Wandalen/wretry.action@v3
         with:
-          name: validator-${{ github.run_id }}-${{ github.event.inputs.run_id }}
-          path: ${{ env.RESULTS_DIR }}/validation_result.json
+          action: actions/upload-artifact@v4
+          with: |
+            name: validator-${{ github.run_id }}-${{ github.event.inputs.run_id }}
+            path: ${{ env.RESULTS_DIR }}/validation_result.json
+          attempt_limit: 3
+          attempt_delay: 30000
 
       - name: Commit and push fix
         run: |

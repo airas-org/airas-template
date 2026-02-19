@@ -90,15 +90,19 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install LaTeX, ChkTeX, and other dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            chktex \
-            texlive-base \
-            texlive-latex-recommended \
-            texlive-fonts-recommended \
-            texlive-latex-extra \
-            texlive-science
+        uses: Wandalen/wretry.action@v3
+        with:
+          attempt_limit: 3
+          attempt_delay: 30000
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y \
+              chktex \
+              texlive-base \
+              texlive-latex-recommended \
+              texlive-fonts-recommended \
+              texlive-latex-extra \
+              texlive-science
 
       - name: Save prompt to file
         run: |

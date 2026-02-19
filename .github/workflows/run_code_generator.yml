@@ -95,23 +95,24 @@ jobs:
 
       - name: Run Claude Code for code generation
         if: github.event.inputs.github_actions_agent == 'claude_code'
-        uses: ./.github/actions/run-claude-code
-        with:
-          prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
-          model_name: ${{ github.event.inputs.model_name }}
-          allowed_tools: '*'
-          timeout_minutes: '15'
+        uses: Wandalen/wretry.action@v3
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
+        with:
+          action: ./.github/actions/run-claude-code
+          with: |
+            prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
+            model_name: ${{ github.event.inputs.model_name }}
+            allowed_tools: '*'
+            timeout_minutes: '15'
+          attempt_limit: 2
+          attempt_delay: 30000
 
       - name: Run OpenCode for code generation
         if: github.event.inputs.github_actions_agent == 'open_code'
-        uses: ./.github/actions/run-open-code
-        with:
-          prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
-          model_name: ${{ github.event.inputs.model_name }}
+        uses: Wandalen/wretry.action@v3
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
@@ -131,6 +132,13 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+        with:
+          action: ./.github/actions/run-open-code
+          with: |
+            prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
+            model_name: ${{ github.event.inputs.model_name }}
+          attempt_limit: 2
+          attempt_delay: 30000
 
       - name: Commit and push code generation changes
         run: |
