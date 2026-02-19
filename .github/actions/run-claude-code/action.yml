@@ -31,6 +31,11 @@ runs:
     - name: Prepare prompt
       shell: bash
       run: |
+        # Normalize model name (remove anthropic/ prefix if present)
+        MODEL_NAME="${{ inputs.model_name }}"
+        MODEL_NAME="${MODEL_NAME#anthropic/}"
+        echo "CLAUDE_MODEL_NAME=${MODEL_NAME}" >> $GITHUB_ENV
+
         if [ -n "${{ inputs.prompt_file }}" ]; then
           if [ ! -f "${{ inputs.prompt_file }}" ]; then
             echo "::error::Prompt file not found: ${{ inputs.prompt_file }}"
@@ -54,4 +59,4 @@ runs:
         anthropic_api_key: ${{ env.ANTHROPIC_API_KEY }}
         prompt: ${{ env.CLAUDE_PROMPT }}
         allowed_bots: '*' 
-        claude_args: "--model=${{ inputs.model_name }} --max-turns=${{ inputs.max_turns }} --allowed-tools ${{ inputs.allowed_tools }}"
+        claude_args: "--model=${{ env.CLAUDE_MODEL_NAME }} --max-turns=${{ inputs.max_turns }} --allowed-tools ${{ inputs.allowed_tools }}"
