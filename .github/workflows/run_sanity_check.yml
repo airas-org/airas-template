@@ -30,7 +30,7 @@ jobs:
   run-sanity-check:
     name: Run Sanity Check for ${{ github.event.inputs.run_id }}
     runs-on: ${{ fromJSON(github.event.inputs.runner_label) }}
-    timeout-minutes: 120
+    timeout-minutes: 1440
 
     outputs:
       sanity_passed: ${{ steps.check-result.outputs.passed }}

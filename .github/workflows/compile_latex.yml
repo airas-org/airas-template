@@ -44,7 +44,7 @@ jobs:
   autonomous-latex-fix-and-compile:
     name: Autonomous LaTeX Fix and Compile Cycle
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 1440
 
     env:
       LATEX_DIR: .research/latex/${{ github.event.inputs.subdir }}

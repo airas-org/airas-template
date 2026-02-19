@@ -71,7 +71,7 @@ jobs:
   fix:
     name: Validate and Fix Experiment
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 360
 
     steps:
       # NOTE: Free disk space to prevent "disk was full" errors during workflow execution
