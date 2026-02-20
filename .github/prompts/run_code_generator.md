@@ -119,7 +119,7 @@ Required Outputs:
 src/train.py (if training is required):
 - Single run executor; invoked by main.py as a subprocess.
 - Initialize WandB with:
-	- wandb.init(entity=cfg.wandb.entity, project=cfg.wandb.project, id=cfg.run.run_id, config=OmegaConf.to_container(cfg, resolve=True), resume="allow")
+	- wandb.init(entity=cfg.wandb.entity, project=cfg.wandb.project, name=cfg.run.run_id, config=OmegaConf.to_container(cfg, resolve=True))
 - Skip wandb.init when disabled.
 - If optuna is used, run the search first and train once with the best params. Do not log intermediate trials to WandB.
 - Log metrics with consistent keys across train.py/evaluate.py.
@@ -137,7 +137,10 @@ src/evaluate.py:
 - Independent script; not called from main.py.
 - Parse args: results_dir, run_ids (JSON string list).
 - Load WandB config from the run config or environment variables.
-- For each run_id, fetch run history/summary/config from WandB API.
+- For each run_id, fetch run history/summary/config from WandB API by display name:
+	- api = wandb.Api()
+	- runs = api.runs(f"{entity}/{project}", filters={"display_name": run_id}, order="-created_at")
+	- run = runs[0]  # most recent run with that name
 - Export per-run metrics to {results_dir}/{run_id}/metrics.json.
 - Create per-run figures in {results_dir}/{run_id}/ as PDF format with unique names.
 - Export aggregated metrics to {results_dir}/comparison/aggregated_metrics.json with:
