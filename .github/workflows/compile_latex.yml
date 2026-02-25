@@ -1,4 +1,9 @@
-﻿name: "Compile LaTeX"
+﻿# TODO: Consider splitting compile and agent into separate workflows
+#       (compile_latex_v2.yml + run_latex_editor.yml) for clearer control flow.
+# TODO: Consider using a LaTeX MCP server instead of raw CLI commands
+#       if it provides clear benefits for agent-driven compilation.
+name: "Compile LaTeX"
+run-name: "🤖 Compile LaTeX"
 
 on:
   workflow_dispatch:
@@ -26,6 +31,12 @@ on:
         description: 'Model to use (for OpenCode: openrouter/openai/gpt-5-nano, for Claude Code: sonnet/opus/haiku)'
         required: true
         default: 'sonnet'
+      # NOTE: Use prompt_path instead of passing prompt directly to avoid
+      # "Argument list too long" error in AI agent tools (OpenCode/ClaudeCode)
+      prompt_path:
+        description: 'Path to the prompt template file'
+        required: false
+        default: '.github/prompts/run_latex_editor.md'
       retry_count:
         description: 'Current retry attempt (internal use)'
         required: false
@@ -48,40 +59,6 @@ jobs:
 
     env:
       LATEX_DIR: .research/latex/${{ github.event.inputs.subdir }}
-      PROMPT: |
-        You are a fully autonomous AI assistant specializing in LaTeX document correction.
-        Your task is to ensure the LaTeX paper is free of chktex warnings and compiles successfully into a PDF. You will achieve this by
-        executing, analyzing, fixing, and re-validating the document.
-        You have been granted full tool access.
-
-        Guiding Principles:
-        - Scope: Do not perform any Git operations like commit or push. Your sole responsibility is to make the LaTeX document compilable.
-        - Method: When fixing errors, you MUST only modify existing files. Do not create new files.
-        - Minimal Edits: You MUST limit your changes to the absolute minimum required to fix LaTeX syntax, chktex warnings, or compilation errors.
-        - Autonomy: Execute all steps autonomously without asking for permission.
-
-        Procedure:
-        1.  Change Directory: First, change your working directory to `.research/latex/${{ github.event.inputs.subdir }}`. All subsequent commands MUST be run from this directory.
-        2.  Run ChkTeX: Execute the following command:
-            set -e
-            echo "=== [PHASE 1/2] Running ChkTeX... ==="
-            chktex -q main.tex
-
-        3.  Analyze & Fix ChkTeX: If the command fails, you MUST analyze the chktex warnings from the output, fix the `main.tex` file, and repeat step 2 until it passes.
-        4.  Run LaTeX Compile: Once chktex passes, execute the following command:
-            set -e
-            echo "=== [PHASE 2/2] Compiling LaTeX document... ==="
-            pdflatex -interaction=nonstopmode main.tex
-
-            if [ -f "main.aux" ]; then
-              bibtex main || echo "Bibtex warning ignored"
-            fi
-
-            pdflatex -interaction=nonstopmode main.tex
-            pdflatex -interaction=nonstopmode main.tex
-
-        5.  Analyze & Fix Compilation: If compilation fails, you MUST analyze the LaTeX errors (e.g., undefined control sequences, missing files, bad boxes), fix the `.tex` files, and repeat step 4 until it succeeds.
-        6.  Completion: Once both phases are complete, the task is finished.
 
     steps:
       - name: Checkout repository
@@ -104,18 +81,36 @@ jobs:
               texlive-latex-extra \
               texlive-science
 
-      - name: Save prompt to file
+      - name: Build prompt
+        id: build-prompt
+        env:
+          PROMPT_PATH: ${{ github.event.inputs.prompt_path }}
+          PAPER_NAME: ${{ github.event.inputs.paper_name }}
         run: |
-          PROMPT_FILE="/tmp/latex_prompt.txt"
-          printf '%s\n' '${{ env.PROMPT }}' > "$PROMPT_FILE"
-          echo "PROMPT_FILE=$PROMPT_FILE" >> "$GITHUB_ENV"
+          set -e
+          if [ ! -f "$PROMPT_PATH" ]; then
+            echo "::error::Prompt file not found: $PROMPT_PATH"
+            exit 1
+          fi
+
+          PROMPT_FILE="/tmp/latex_editor_prompt.txt"
+          {
+            cat "$PROMPT_PATH"
+            echo ""
+            echo "LATEX_DIR: $LATEX_DIR"
+            echo "PAPER_NAME: $PAPER_NAME"
+          } > "$PROMPT_FILE"
+
+          echo "prompt_file=$PROMPT_FILE" >> "$GITHUB_OUTPUT"
+          echo "Prompt saved to: $PROMPT_FILE ($(wc -c < "$PROMPT_FILE") bytes)"
 
       - name: Run Claude Code to fix errors
         if: github.event.inputs.github_actions_agent == 'claude_code'
         uses: ./.github/actions/run-claude-code
         with:
-          prompt_file: ${{ env.PROMPT_FILE }}
+          prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
           model_name: ${{ github.event.inputs.model_name }}
+          allowed_tools: '*'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
@@ -123,7 +118,7 @@ jobs:
         if: github.event.inputs.github_actions_agent == 'open_code'
         uses: ./.github/actions/run-open-code
         with:
-          prompt_file: ${{ env.PROMPT_FILE }}
+          prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
           model_name: ${{ github.event.inputs.model_name }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
