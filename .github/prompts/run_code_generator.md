@@ -14,6 +14,7 @@ Constraints:
 Tool Use:
 - All available agent tools are permitted. Use them when useful for correctness and completeness.
 - Prefer quick, non-destructive checks (syntax-level, lightweight runs) over long-running tasks.
+- AI Research Skills are installed in the project. Before implementing, check available skills and load any that are relevant to the task (e.g., fine-tuning, distributed training, optimization, inference). Skills provide best practices and framework-specific guidance.
 
 Allowed Files (fixed):
 - Dockerfile (repository root)

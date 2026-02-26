@@ -60,6 +60,11 @@ jobs:
         with:
           ref: ${{ github.event.inputs.branch_name }}
 
+      - name: Install AI Research Skills
+        run: |
+          mkdir -p ~/.claude/skills ~/.config/opencode/skills
+          npx @orchestra-research/ai-research-skills install --all --local
+
       - name: Build code generation prompt
         id: build-prompt
         env:
