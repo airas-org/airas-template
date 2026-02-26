@@ -218,6 +218,7 @@ jobs:
 
           if ! git diff --staged --quiet; then
             git commit -m "[CI] Automated fix for run_id=${{ github.event.inputs.run_id }} using ${{ github.event.inputs.github_actions_agent }}"
+            git checkout -- .
             for i in {1..5}; do
               git pull --rebase -X theirs origin ${{ github.event.inputs.branch_name }}
               git push && break
@@ -285,6 +286,7 @@ jobs:
 
             if ! git diff --staged --quiet; then
               git commit -m "[CI] Commit all changes from autonomous run (${{ env.RESULTS_DIR }})"
+              git checkout -- .
               for i in {1..5}; do
                 git pull --rebase -X theirs origin ${{ github.event.inputs.branch_name }}
                 git push && break
