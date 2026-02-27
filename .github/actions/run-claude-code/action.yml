@@ -24,10 +24,21 @@ inputs:
     description: 'Timeout in minutes for Claude Code execution'
     required: false
     default: '20'
+  mcp_config:
+    description: 'Path to MCP server config JSON file'
+    required: false
+    default: ''
+  mcp_timeout:
+    description: 'MCP server timeout in milliseconds'
+    required: false
+    default: '600000'
 
 runs:
   using: 'composite'
   steps:
+    - name: Install uv (for uvx MCP servers)
+      uses: astral-sh/setup-uv@v5
+
     - name: Prepare prompt
       shell: bash
       run: |
@@ -35,6 +46,19 @@ runs:
         MODEL_NAME="${{ inputs.model_name }}"
         MODEL_NAME="${MODEL_NAME#anthropic/}"
         echo "CLAUDE_MODEL_NAME=${MODEL_NAME}" >> $GITHUB_ENV
+
+        # Build MCP config flags (default + workflow-specific)
+        MCP_FLAG=""
+        DEFAULT_MCP=".github/mcp-config.json"
+        if [ -f "$DEFAULT_MCP" ]; then
+          MCP_FLAG="--mcp-config $DEFAULT_MCP"
+          echo "Default MCP config found: $DEFAULT_MCP"
+        fi
+        if [ -n "${{ inputs.mcp_config }}" ]; then
+          MCP_FLAG="$MCP_FLAG --mcp-config ${{ inputs.mcp_config }}"
+          echo "Additional MCP config: ${{ inputs.mcp_config }}"
+        fi
+        echo "CLAUDE_MCP_FLAG=${MCP_FLAG}" >> $GITHUB_ENV
 
         if [ -n "${{ inputs.prompt_file }}" ]; then
           if [ ! -f "${{ inputs.prompt_file }}" ]; then
@@ -58,5 +82,7 @@ runs:
       with:
         anthropic_api_key: ${{ env.ANTHROPIC_API_KEY }}
         prompt: ${{ env.CLAUDE_PROMPT }}
-        allowed_bots: '*' 
-        claude_args: "--model=${{ env.CLAUDE_MODEL_NAME }} --max-turns=${{ inputs.max_turns }} --allowed-tools ${{ inputs.allowed_tools }}"
+        allowed_bots: '*'
+        claude_args: "--model=${{ env.CLAUDE_MODEL_NAME }} --max-turns=${{ inputs.max_turns }} --allowed-tools ${{ inputs.allowed_tools }} ${{ env.CLAUDE_MCP_FLAG }}"
+      env:
+        MCP_TIMEOUT: ${{ inputs.mcp_timeout }}

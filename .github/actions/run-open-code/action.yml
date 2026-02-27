@@ -15,6 +15,14 @@ inputs:
     description: 'Maximum number of retries'
     required: false
     default: '10'
+  mcp_config:
+    description: 'Path to MCP server config JSON file (will be merged into .opencode/opencode.jsonc)'
+    required: false
+    default: ''
+  mcp_timeout:
+    description: 'Global MCP tool call timeout in milliseconds'
+    required: false
+    default: '600000'
 
 runs:
   using: "composite"
@@ -26,6 +34,9 @@ runs:
       uses: actions/setup-node@v4
       with:
         node-version: "20"
+
+    - name: Install uv (for uvx MCP servers)
+      uses: astral-sh/setup-uv@v5
 
     - name: Install bun
       shell: bash
@@ -47,6 +58,68 @@ runs:
           fi
         done
         npm install opencode-plugin-langfuse
+
+    # -----------------------------
+    # Merge MCP config if provided
+    # -----------------------------
+    - name: Merge MCP config into opencode.jsonc
+      shell: bash
+      run: |
+        set -e
+        OPENCODE_CONFIG=".opencode/opencode.jsonc"
+        DEFAULT_MCP=".github/mcp-config.json"
+        EXTRA_MCP="${{ inputs.mcp_config }}"
+
+        # Collect MCP config files to merge (default + workflow-specific)
+        MCP_FILES=()
+        if [ -f "$DEFAULT_MCP" ]; then
+          MCP_FILES+=("$DEFAULT_MCP")
+          echo "Default MCP config found: $DEFAULT_MCP"
+        fi
+        if [ -n "$EXTRA_MCP" ]; then
+          if [ ! -f "$EXTRA_MCP" ]; then
+            echo "::error::MCP config file not found: $EXTRA_MCP"
+            exit 1
+          fi
+          MCP_FILES+=("$EXTRA_MCP")
+          echo "Additional MCP config: $EXTRA_MCP"
+        fi
+
+        if [ ${#MCP_FILES[@]} -eq 0 ]; then
+          echo "No MCP config files to merge, skipping"
+          exit 0
+        fi
+
+        # Convert claude-code-action MCP format to OpenCode format and merge
+        # Input:  { "mcpServers": { "name": { "command": "cmd", "args": [...], "env": {...} } } }
+        # Output in opencode.jsonc: { "mcp": { "name": { "type": "local", "command": ["cmd", ...args], "environment": {...} } } }
+        node -e "
+        const fs = require('fs');
+        const mcpFiles = process.argv.slice(1);
+
+        // Read opencode config (strip // comments)
+        const raw = fs.readFileSync('$OPENCODE_CONFIG', 'utf8');
+        const config = JSON.parse(raw.replace(/^(\s*)\/\/.*/gm, '').replace(/(?<=[^:])\/\/.*/g, ''));
+
+        // Merge all MCP config files
+        const mcp = config.mcp || {};
+        for (const file of mcpFiles) {
+          const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+          for (const [name, server] of Object.entries(data.mcpServers || {})) {
+            const entry = { type: 'local', command: [server.command, ...(server.args || [])] };
+            if (server.env) entry.environment = server.env;
+            mcp[name] = entry;
+          }
+        }
+
+        config.mcp = mcp;
+        // Set global MCP timeout to avoid timeout on slow MCP tools like image generation
+        config.experimental = config.experimental || {};
+        config.experimental.mcp_timeout = ${{ inputs.mcp_timeout }};
+        fs.writeFileSync('$OPENCODE_CONFIG', JSON.stringify(config, null, 2));
+        " "${MCP_FILES[@]}"
+        echo "MCP config merged into $OPENCODE_CONFIG"
+        cat "$OPENCODE_CONFIG"
 
     # -----------------------------
     # Resolve LLM provider
