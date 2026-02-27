@@ -5,6 +5,7 @@ on:
 
 env:
   RESULTS_DIR: ".research/results"
+  DIAGRAMS_DIR: ".research/diagrams"
 
 jobs:
   convert-and-upload:
@@ -27,14 +28,21 @@ jobs:
           tmp_dir="/tmp/output_images"
           mkdir -p "$tmp_dir"
 
-          if [ ! -d "$RESULTS_DIR" ]; then
-            echo "Directory $RESULTS_DIR not found. No results to process."
+          SEARCH_DIRS=""
+          for dir in "$RESULTS_DIR" "$DIAGRAMS_DIR"; do
+            if [ -d "$dir" ]; then
+              SEARCH_DIRS="$SEARCH_DIRS $dir"
+            fi
+          done
+
+          if [ -z "$SEARCH_DIRS" ]; then
+            echo "No source directories found. No results to process."
             exit 0
           fi
 
-          echo "Looking for PDFs in $RESULTS_DIR recursively..."
+          echo "Looking for PDFs in:$SEARCH_DIRS ..."
 
-          find "$RESULTS_DIR" -type f -name "*.pdf" | while read pdf; do
+          find $SEARCH_DIRS -type f -name "*.pdf" | while read pdf; do
             name=$(basename "$pdf" .pdf)
             echo "Converting $pdf to PNG..."
             pdftoppm "$pdf" "$tmp_dir/${name}" -png
