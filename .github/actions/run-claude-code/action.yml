@@ -16,10 +16,6 @@ inputs:
     description: 'Maximum number of turns'
     required: false
     default: '100'
-  allowed_tools:
-    description: 'Comma-separated list of allowed tools'
-    required: false
-    default: 'Bash,Write,Edit,MultiEdit,TodoWrite'
   timeout_minutes:
     description: 'Timeout in minutes for Claude Code execution'
     required: false
@@ -75,7 +71,7 @@ runs:
           echo "${{ inputs.prompt }}" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
         fi
-    
+
     - name: Execute Claude Code
       continue-on-error: true
       uses: anthropics/claude-code-action@v1
@@ -83,6 +79,7 @@ runs:
         anthropic_api_key: ${{ env.ANTHROPIC_API_KEY }}
         prompt: ${{ env.CLAUDE_PROMPT }}
         allowed_bots: '*'
-        claude_args: "--model=${{ env.CLAUDE_MODEL_NAME }} --max-turns=${{ inputs.max_turns }} --allowed-tools ${{ inputs.allowed_tools }} ${{ env.CLAUDE_MCP_FLAG }}"
+        show_full_output: true
+        claude_args: "--model=${{ env.CLAUDE_MODEL_NAME }} --max-turns=${{ inputs.max_turns }} --dangerously-skip-permissions ${{ env.CLAUDE_MCP_FLAG }}"
       env:
         MCP_TIMEOUT: ${{ inputs.mcp_timeout }}

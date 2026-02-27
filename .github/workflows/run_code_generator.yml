@@ -104,7 +104,6 @@ jobs:
         with:
           prompt_file: ${{ steps.build-prompt.outputs.prompt_file }}
           model_name: ${{ github.event.inputs.model_name }}
-          allowed_tools: '*'
           timeout_minutes: '15'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
