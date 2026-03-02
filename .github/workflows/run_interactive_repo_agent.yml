@@ -197,14 +197,14 @@ jobs:
             -t cursorBlink=true \
             tmux attach -t $TMUX_SESSION &
 
-          TTYD_PID=$!
-          echo "[OK] ttyd started on port 7681 (PID: $TTYD_PID)"
+          echo $! > /tmp/ttyd.pid
+          echo "[OK] ttyd started on port 7681 (PID: $(cat /tmp/ttyd.pid))"
 
           sleep 2
 
           # ── 4. Cloudflare Tunnel ──
           cloudflared tunnel --url http://localhost:7681 2>&1 | tee /tmp/cloudflared.log &
-          CLOUDFLARED_PID=$!
+          echo $! > /tmp/cloudflared.pid
 
           echo ""
           echo "Waiting for Cloudflare Tunnel URL..."
@@ -215,6 +215,19 @@ jobs:
             fi
             sleep 2
           done
+
+          # ── 5. Save tunnel URL for artifact upload ──
+          if [ -n "$TUNNEL_URL" ]; then
+            cat > /tmp/tunnel_url.json <<EOF
+          {
+            "tunnel_url": "$TUNNEL_URL",
+            "github_actions_agent": "$AGENT_TYPE",
+            "model_name": "$MODEL_NAME",
+            "session_username": "$SESSION_USERNAME"
+          }
+          EOF
+            echo "TUNNEL_URL=$TUNNEL_URL" >> "$GITHUB_ENV"
+          fi
 
           echo ""
           echo "============================================"
@@ -239,12 +252,25 @@ jobs:
           echo "    - Session persists across browser reloads"
           echo "    - To end the session, cancel the workflow from the Actions page"
           echo "============================================"
-          echo ""
 
+      - name: Upload tunnel URL as artifact
+        if: env.TUNNEL_URL != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: tunnel-url
+          path: /tmp/tunnel_url.json
+
+      - name: Wait for session
+        run: |
+          TMUX_SESSION="airas-session"
           while tmux has-session -t $TMUX_SESSION 2>/dev/null; do
-            sleep 30
+            sleep 300
           done
+          echo "Tmux session ended."
 
-          echo "Tmux session ended. Cleaning up..."
-          kill $TTYD_PID 2>/dev/null || true
-          kill $CLOUDFLARED_PID 2>/dev/null || true
+      - name: Cleanup
+        if: always()
+        run: |
+          kill "$(cat /tmp/ttyd.pid 2>/dev/null)" 2>/dev/null || true
+          kill "$(cat /tmp/cloudflared.pid 2>/dev/null)" 2>/dev/null || true
+          echo "Cleanup complete."
