@@ -64,7 +64,7 @@ jobs:
             "mcpServers": {
               "paperbanana": {
                 "command": "uvx",
-                "args": ["--from", "paperbanana[mcp] @ git+https://github.com/genga6/paperbanana.git@fix/issue-58-mcp-generate-diagram-returns-jpeg-data-with-image-png-media-type", "paperbanana-mcp"],
+                "args": ["--from", "paperbanana[mcp] @ git+https://github.com/genga6/paperbanana.git@main", "paperbanana-mcp"],
                 "env": {
                   "OPENAI_API_KEY": "${{ secrets.OPENAI_API_KEY }}",
                   "OPENAI_BASE_URL": "${{ secrets.OPENAI_BASE_URL }}",
