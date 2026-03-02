@@ -188,6 +188,10 @@ jobs:
 
           sleep 5
 
+          # ── Mask sensitive values in logs ──
+          echo "::add-mask::${SESSION_USERNAME}"
+          echo "::add-mask::${SESSION_PASSWORD}"
+
           # ── 3. ttyd (Web Terminal) ──
           ttyd \
             -W \
@@ -218,12 +222,12 @@ jobs:
 
           # ── 5. Save tunnel URL for artifact upload ──
           if [ -n "$TUNNEL_URL" ]; then
+            echo "::add-mask::${TUNNEL_URL}"
             cat > /tmp/tunnel_url.json <<EOF
           {
             "tunnel_url": "$TUNNEL_URL",
             "github_actions_agent": "$AGENT_TYPE",
-            "model_name": "$MODEL_NAME",
-            "session_username": "$SESSION_USERNAME"
+            "model_name": "$MODEL_NAME"
           }
           EOF
             echo "TUNNEL_URL=$TUNNEL_URL" >> "$GITHUB_ENV"
@@ -243,8 +247,7 @@ jobs:
           echo ""
           echo "  Agent      : $AGENT_TYPE"
           echo "  Model      : $MODEL_NAME"
-          echo "  Username   : $SESSION_USERNAME"
-          echo "  Password   : (specified in workflow_dispatch)"
+          echo "  Auth       : Basic (credentials specified in workflow_dispatch)"
           echo ""
           echo "  Timeout    : ${{ github.event.inputs.timeout_minutes }} minutes"
           echo ""
