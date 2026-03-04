@@ -67,7 +67,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Authenticate to cloud provider (AWS)
         if: inputs.cloud_provider == 'aws'
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -75,13 +75,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION || 'ap-northeast-1' }}
 
-      - name: Authenticate to GCP
+      - name: Authenticate to cloud provider (GCP)
         if: inputs.cloud_provider == 'gcp'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Set up gcloud CLI
+      - name: Set up cloud CLI (GCP)
         if: inputs.cloud_provider == 'gcp'
         uses: google-github-actions/setup-gcloud@v2
 
