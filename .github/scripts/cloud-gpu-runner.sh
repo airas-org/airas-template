@@ -50,7 +50,9 @@ log() {
 }
 
 warn() {
-  echo "::warning::$(date -u '+%Y-%m-%d %H:%M:%S UTC') [cloud-gpu-runner] $*"
+  local msg="$(date -u '+%Y-%m-%d %H:%M:%S UTC') [cloud-gpu-runner] WARNING: $*"
+  echo "::warning::${msg}"
+  echo "${msg}" >&2
 }
 
 get_runner_version() {
@@ -185,7 +187,7 @@ wait_for_runner_online() {
 # ============================================================
 
 aws_resolve_ami() {
-  if [[ -n "${EC2_AMI_ID:-}" ]]; then
+  if [[ -n "${EC2_AMI_ID:-}" && "${AWS_DEFAULT_REGION}" == "${_PRIMARY_REGION:-}" ]]; then
     echo "$EC2_AMI_ID"
     return
   fi
@@ -193,7 +195,7 @@ aws_resolve_ami() {
   local ssm_path="/aws/service/deeplearning/ami/x86_64/oss-nvidia-driver-gpu-pytorch-2.7-ubuntu-22.04/latest/ami-id"
   local ami_id
   ami_id=$(aws ssm get-parameter \
-    --region "${AWS_REGION}" \
+    --region "${AWS_DEFAULT_REGION}" \
     --name "$ssm_path" \
     --query 'Parameter.Value' \
     --output text 2>/dev/null || echo "")
@@ -207,7 +209,7 @@ aws_resolve_ami() {
 }
 
 aws_resolve_subnets() {
-  if [[ -n "${EC2_SUBNET_ID:-}" ]]; then
+  if [[ -n "${EC2_SUBNET_ID:-}" && "${AWS_DEFAULT_REGION}" == "${_PRIMARY_REGION:-}" ]]; then
     echo "$EC2_SUBNET_ID"
     return
   fi
@@ -227,7 +229,7 @@ aws_resolve_subnets() {
 }
 
 aws_resolve_security_group() {
-  if [[ -n "${EC2_SECURITY_GROUP_ID:-}" ]]; then
+  if [[ -n "${EC2_SECURITY_GROUP_ID:-}" && "${AWS_DEFAULT_REGION}" == "${_PRIMARY_REGION:-}" ]]; then
     echo "$EC2_SECURITY_GROUP_ID"
     return
   fi
@@ -254,6 +256,7 @@ aws_try_region() {
 
   log "=== Trying region: ${region} ==="
   export AWS_DEFAULT_REGION="$region"
+  export AWS_REGION="$region"
 
   local ami_id subnets sg_id
   ami_id=$(aws_resolve_ami) || { log "Skipping ${region}: failed to resolve AMI"; return 1; }
@@ -293,14 +296,21 @@ aws_try_region() {
       if [[ -n "$instance_id" && "$instance_id" != "None" ]]; then
         log "Successfully launched ${instance_type} in ${region}"
         rm -f "$launch_err_file"
-        echo "$instance_id"
+        _LAUNCHED_INSTANCE_ID="$instance_id"
         return 0
       fi
       local launch_err
       launch_err=$(cat "$launch_err_file")
-      if grep -qE "Unsupported|InvalidAMIID\.NotFound|InsufficientInstanceCapacity" "$launch_err_file"; then
-        warn "${instance_type} not available in ${region}/${subnet_id} (skipping): ${launch_err}"
+      if grep -qE "VcpuLimitExceeded|PendingVerification" "$launch_err_file"; then
+        _REGION_FAIL_REASON=$(grep -oE "VcpuLimitExceeded|PendingVerification" "$launch_err_file" | head -1)
+        warn "${region}: ${_REGION_FAIL_REASON} (skipping region)"
+        rm -f "$launch_err_file"
+        return 1
+      elif grep -qE "Unsupported|InvalidAMIID\.NotFound|InsufficientInstanceCapacity|InvalidSubnetID\.NotFound" "$launch_err_file"; then
+        _REGION_FAIL_REASON="InsufficientInstanceCapacity"
+        warn "${instance_type} not available in ${region}/${subnet_id} (skipping)"
       else
+        _REGION_FAIL_REASON="UnknownError"
         log "FAILED ${instance_type} in ${region}/${subnet_id}: ${launch_err}"
       fi
       instance_id=""
@@ -315,6 +325,7 @@ aws_start() {
   local instance_types_str="${GPU_INSTANCE_TYPE:-g4dn.xlarge}"
   local fallback_types="${GPU_INSTANCE_TYPE_FALLBACKS:-g5.xlarge,g6.xlarge,g4dn.2xlarge,g5.2xlarge}"
   local primary_region="${AWS_REGION:-us-east-1}"
+  export _PRIMARY_REGION="$primary_region"
   local fallback_regions="${AWS_REGION_FALLBACKS:-us-east-1,us-west-2,us-east-2,eu-west-1,ap-northeast-1}"
 
   # Build instance type list
@@ -345,15 +356,20 @@ aws_start() {
 
   local instance_id=""
   local launched_region=""
+  _LAUNCHED_INSTANCE_ID=""
+  local region_summary=""
   for region in "${region_list[@]}"; do
-    instance_id=$(aws_try_region "$region" "${type_list[@]}") && {
+    _REGION_FAIL_REASON=""
+    if aws_try_region "$region" "${type_list[@]}"; then
+      instance_id="$_LAUNCHED_INSTANCE_ID"
       launched_region="$region"
       break
-    }
+    fi
+    region_summary+=" ${region}:${_REGION_FAIL_REASON:-Unknown}"
   done
 
   if [[ -z "$instance_id" ]]; then
-    log "ERROR: Failed to launch EC2 instance (tried all types, AZs, and regions)"
+    log "ERROR: Failed to launch EC2 instance. Region summary:${region_summary}"
     return 1
   fi
 
