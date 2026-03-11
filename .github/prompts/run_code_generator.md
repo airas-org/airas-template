@@ -68,7 +68,7 @@ Command Line Interface:
 - Execution:
 	- uv run python -u -m src.main run={run_id} results_dir={path} mode=main
 	- uv run python -u -m src.main run={run_id} results_dir={path} mode=sanity_check
-	- uv run python -u -m src.main run={run_id} results_dir={path} mode=pilot  # optional future use
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=pilot
 - Evaluation:
 	- uv run python -u -m src.evaluate results_dir={path} run_ids='["run-1", "run-2"]'
 
@@ -79,6 +79,13 @@ Mode Behavior:
 	- For other tasks: minimal execution to verify functionality
 	- Use the same dataset and model as main runs; only reduce steps/samples.
 	- Use a separate W&B namespace to avoid polluting main runs: set wandb.project to "{project}-sanity" unless the config explicitly overrides.
+- pilot:
+	- For training: epochs=20-30% of full (at least 3), full batch size, wandb.mode=online, optuna.n_trials=3
+	- For inference: 20% of full dataset (at least 50 samples), wandb.mode=online
+	- For other tasks: representative subset of full execution
+	- Use the same dataset and model as main runs; only reduce scale.
+	- Use a separate W&B namespace: set wandb.project to "{project}-pilot" unless the config explicitly overrides.
+	- Goal: produce preliminary metrics sufficient to judge whether the full experiment is worth running.
 - main:
 	- For training: wandb.mode=online, full epochs, full optuna trials
 	- For inference: wandb.mode=online, full dataset
@@ -108,6 +115,32 @@ Sanity Validation (required):
 	- Training: SANITY_VALIDATION_SUMMARY: {"steps":..., "loss_start":..., "loss_end":..., "accuracy_min":..., "accuracy_max":...}
 	- Inference: SANITY_VALIDATION_SUMMARY: {"samples":..., "outputs_valid":..., "outputs_unique":...}
 	- Other: SANITY_VALIDATION_SUMMARY: {"operations":..., "status":...}
+
+Pilot Validation (required):
+- In pilot mode, validate that the run produced meaningful preliminary results sufficient to inform a go/no-go decision for the main experiment.
+- Adapt validation to task type:
+	- Training tasks:
+		- At least 10 training steps are executed.
+		- Loss shows a decreasing trend (final loss < initial loss).
+		- Primary metric (e.g., accuracy, F1) is logged and non-zero.
+	- Inference tasks:
+		- At least 50 samples are processed successfully.
+		- Primary metric is computed and finite.
+		- Outputs are non-trivial (not all identical).
+	- Other tasks:
+		- A representative subset of operations completes successfully.
+		- At least one primary metric is produced and non-trivial.
+- Common conditions for all tasks:
+	- All logged metrics are finite (no NaN/inf).
+	- If multiple runs are executed in one process, fail when all runs report identical metric values.
+- If metrics are missing, emit a FAIL with reason=missing_metrics.
+- Emit a single-line verdict to stdout:
+	- PILOT_VALIDATION: PASS
+	- PILOT_VALIDATION: FAIL reason=<short_reason>
+- Always print a compact JSON summary line with actual metric values (adapt fields to task type):
+	- Training: PILOT_VALIDATION_SUMMARY: {"steps":..., "loss_start":..., "loss_end":..., "primary_metric":..., "primary_metric_value":...}
+	- Inference: PILOT_VALIDATION_SUMMARY: {"samples":..., "primary_metric":..., "primary_metric_value":..., "outputs_unique":...}
+	- Other: PILOT_VALIDATION_SUMMARY: {"operations":..., "primary_metric":..., "primary_metric_value":...}
 
 Required Outputs:
 - Dockerfile (repository root)

@@ -1,5 +1,5 @@
 name: "Run Workflow on Cloud Runner"
-run-name: "Cloud Runner: ${{ inputs.target_workflow }} (${{ inputs.run_id }})"
+run-name: "Cloud Runner: [${{ inputs.mode }}] ${{ inputs.run_id }}"
 
 # Wrapper workflow that:
 #   1. Launches an on-demand cloud instance (AWS EC2 or GCP)
@@ -14,13 +14,14 @@ run-name: "Cloud Runner: ${{ inputs.target_workflow }} (${{ inputs.run_id }})"
 on:
   workflow_dispatch:
     inputs:
-      target_workflow:
-        description: 'Target workflow filename (e.g., run_sanity_check.yml)'
+      mode:
+        description: 'Experiment mode'
         required: true
         type: choice
         options:
-          - run_sanity_check.yml
-          - run_main_experiment.yml
+          - sanity_check
+          - pilot
+          - main
       run_id:
         description: 'run_id to pass to the target workflow'
         required: true
@@ -126,14 +127,16 @@ jobs:
 
           RUNNER_LABEL='["${{ needs.start-runner.outputs.runner-label }}"]'
 
-          echo "Dispatching ${{ inputs.target_workflow }} with:"
+          echo "Dispatching run_experiment.yml with:"
+          echo "  mode: ${{ inputs.mode }}"
           echo "  branch: ${BRANCH}"
           echo "  run_id: ${{ inputs.run_id }}"
           echo "  runner_label: ${RUNNER_LABEL}"
 
-          gh workflow run "${{ inputs.target_workflow }}" \
+          gh workflow run "run_experiment.yml" \
             --repo "${{ github.repository }}" \
             --ref "${BRANCH}" \
+            -f mode="${{ inputs.mode }}" \
             -f run_id="${{ inputs.run_id }}" \
             -f runner_label="${RUNNER_LABEL}" \
             -f branch_name="${BRANCH}"
