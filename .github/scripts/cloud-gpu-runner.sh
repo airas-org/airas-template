@@ -326,7 +326,7 @@ aws_start() {
   local fallback_types="${GPU_INSTANCE_TYPE_FALLBACKS:-g5.xlarge,g6.xlarge,g4dn.2xlarge,g5.2xlarge}"
   local primary_region="${AWS_REGION:-us-east-1}"
   export _PRIMARY_REGION="$primary_region"
-  local fallback_regions="${AWS_REGION_FALLBACKS:-us-east-1,us-west-2,us-east-2,eu-west-1,ap-northeast-1}"
+  local fallback_regions="${AWS_REGION_FALLBACKS:-us-east-1,us-west-2,us-east-2,eu-west-1,ap-northeast-1,ap-northeast-3}"
 
   # Build instance type list
   local all_types="${instance_types_str},${fallback_types}"
