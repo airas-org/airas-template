@@ -51,9 +51,9 @@ Code Requirements:
 
 Command Line Interface:
 - Execution:
-	- uv run python -u -m src.main run={run_id} results_dir={path} mode=main
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=full
 	- uv run python -u -m src.main run={run_id} results_dir={path} mode=sanity_check
-	- uv run python -u -m src.main run={run_id} results_dir={path} mode=pilot  # optional future use
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=pilot
 - Evaluation:
   - uv run python -u -m src.evaluate results_dir={path} run_ids='["run-1", "run-2"]'
 
@@ -62,9 +62,9 @@ Mode Behavior:
   - For training: epochs=1, batches=1-2, wandb.mode=online, optuna.n_trials=0
   - For inference: samples=5-10, wandb.mode=online
 	- For other tasks: minimal execution to verify functionality
-  - Use the same dataset and model as main runs; only reduce steps/samples.
-  - Use a separate W&B namespace to avoid polluting main runs: set wandb.project to "{project}-sanity" unless the config explicitly overrides.
-- main:
+  - Use the same dataset and model as full runs; only reduce steps/samples.
+  - Use a separate W&B namespace to avoid polluting full runs: set wandb.project to "{project}-sanity" unless the config explicitly overrides.
+- full:
 	- For training: wandb.mode=online, full epochs, full optuna trials
 	- For inference: wandb.mode=online, full dataset
 	- For other tasks: full execution as specified in experimental_design

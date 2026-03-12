@@ -11,7 +11,7 @@ on:
         options:
           - sanity_check
           - pilot
-          - main
+          - full
       branch_name:
         description: 'Branch name (e.g., main)'
       run_id:

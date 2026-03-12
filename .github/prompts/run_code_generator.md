@@ -66,7 +66,7 @@ Experiment Code Requirements:
 
 Command Line Interface:
 - Execution:
-	- uv run python -u -m src.main run={run_id} results_dir={path} mode=main
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=full
 	- uv run python -u -m src.main run={run_id} results_dir={path} mode=sanity_check
 	- uv run python -u -m src.main run={run_id} results_dir={path} mode=pilot
 - Evaluation:
@@ -77,16 +77,16 @@ Mode Behavior:
 	- For training: epochs=1, batches=1-2, wandb.mode=online, optuna.n_trials=0
 	- For inference: samples=5-10, wandb.mode=online
 	- For other tasks: minimal execution to verify functionality
-	- Use the same dataset and model as main runs; only reduce steps/samples.
-	- Use a separate W&B namespace to avoid polluting main runs: set wandb.project to "{project}-sanity" unless the config explicitly overrides.
+	- Use the same dataset and model as full runs; only reduce steps/samples.
+	- Use a separate W&B namespace to avoid polluting full runs: set wandb.project to "{project}-sanity" unless the config explicitly overrides.
 - pilot:
 	- For training: epochs=20-30% of full (at least 3), full batch size, wandb.mode=online, optuna.n_trials=3
 	- For inference: 20% of full dataset (at least 50 samples), wandb.mode=online
 	- For other tasks: representative subset of full execution
-	- Use the same dataset and model as main runs; only reduce scale.
+	- Use the same dataset and model as full runs; only reduce scale.
 	- Use a separate W&B namespace: set wandb.project to "{project}-pilot" unless the config explicitly overrides.
 	- Goal: produce preliminary metrics sufficient to judge whether the full experiment is worth running.
-- main:
+- full:
 	- For training: wandb.mode=online, full epochs, full optuna trials
 	- For inference: wandb.mode=online, full dataset
 	- For other tasks: full execution as specified in INPUT_DATA
@@ -117,7 +117,7 @@ Sanity Validation (required):
 	- Other: SANITY_VALIDATION_SUMMARY: {"operations":..., "status":...}
 
 Pilot Validation (required):
-- In pilot mode, validate that the run produced meaningful preliminary results sufficient to inform a go/no-go decision for the main experiment.
+- In pilot mode, validate that the run produced meaningful preliminary results sufficient to inform a go/no-go decision for the full experiment.
 - Adapt validation to task type:
 	- Training tasks:
 		- At least 10 training steps are executed.
