@@ -35,7 +35,7 @@ High-Level Plan:
 2. Parse INPUT_DATA and identify what has changed in the updated experimental design compared to the existing code.
 3. Delete all existing config/run/*.yaml files and regenerate them from scratch.
 4. Apply necessary changes to source code, Dockerfile, and dependencies based on what the updated design requires.
-5. Ensure required files exist and can run in sanity_check mode.
+5. Ensure required files exist and can run in sanity mode.
 
 Refinement Strategy:
 - **Identify the diff**: Compare the updated experimental design with the existing code to determine what changed (e.g., different model, different dataset, changed hyperparameters, new evaluation metric).
@@ -77,13 +77,13 @@ Experiment Code Requirements:
 Command Line Interface:
 - Execution:
 	- uv run python -u -m src.main run={run_id} results_dir={path} mode=full
-	- uv run python -u -m src.main run={run_id} results_dir={path} mode=sanity_check
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=sanity
 	- uv run python -u -m src.main run={run_id} results_dir={path} mode=pilot
 - Evaluation:
 	- uv run python -u -m src.evaluate results_dir={path} run_ids='["run-1", "run-2"]'
 
 Mode Behavior:
-- sanity_check:
+- sanity:
 	- For training: epochs=1, batches=1-2, wandb.mode=online, optuna.n_trials=0
 	- For inference: samples=5-10, wandb.mode=online
 	- For other tasks: minimal execution to verify functionality
@@ -102,7 +102,7 @@ Mode Behavior:
 	- For other tasks: full execution as specified in INPUT_DATA
 
 Sanity Validation (required):
-- In sanity_check mode, perform a lightweight sanity check to ensure the experiment is meaningful.
+- In sanity mode, perform a lightweight sanity check to ensure the experiment is meaningful.
 - Adapt validation to task type:
 	- Training tasks:
 		- At least 5 training steps are executed (prefer 5 batches).
@@ -224,9 +224,9 @@ pyproject.toml:
 	- Any other task-specific dependencies
 
 Basic Validation:
-- Ensure the following is runnable in sanity_check mode (syntax-level):
-	- uv run python -u -m src.main run={run_id} results_dir={path} mode=sanity_check
-- Ensure sanity_check mode prints SANITY_VALIDATION and SANITY_VALIDATION_SUMMARY lines.
+- Ensure the following is runnable in sanity mode (syntax-level):
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=sanity
+- Ensure sanity mode prints SANITY_VALIDATION and SANITY_VALIDATION_SUMMARY lines.
 - Validation should succeed for the specific task type (training, inference, etc.).
 
 Syntax Validation After Generation:

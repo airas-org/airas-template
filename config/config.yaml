@@ -5,7 +5,7 @@ defaults:
   - _self_
   - run: ???  # loads from config/run/, accessible as 'run=' in CLI
 
-# Execution mode: main, sanity_check, or pilot
+# Execution mode: main, sanity, or pilot
 mode: main
 
 # Results output directory

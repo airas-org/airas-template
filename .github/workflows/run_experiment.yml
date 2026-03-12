@@ -9,7 +9,7 @@ on:
         required: true
         type: choice
         options:
-          - sanity_check
+          - sanity
           - pilot
           - full
       branch_name:
@@ -38,7 +38,7 @@ jobs:
   run-experiment:
     name: Run Experiment (${{ inputs.mode }}) for ${{ inputs.run_id }}
     runs-on: ${{ fromJSON(inputs.runner_label) }}
-    timeout-minutes: ${{ inputs.mode == 'sanity_check' && 1440 || 6000 }}
+    timeout-minutes: ${{ inputs.mode == 'sanity' && 1440 || 6000 }}
 
     outputs:
       experiment_passed: ${{ steps.check-result.outputs.passed }}
@@ -193,7 +193,7 @@ jobs:
           outcome="${{ steps.run-exp-docker.outcome }}${{ steps.run-exp-native.outcome }}"
           passed=false
           if [[ "$outcome" == *"success"* ]] && grep -q "\[EXPERIMENT RUN\] PASSED" "$RESULTS_DIR/stdout.txt"; then
-            if [[ "$MODE" == "sanity_check" ]]; then
+            if [[ "$MODE" == "sanity" ]]; then
               if grep -q "SANITY_VALIDATION: PASS" "$RESULTS_DIR/stdout.txt"; then
                 passed=true
               else

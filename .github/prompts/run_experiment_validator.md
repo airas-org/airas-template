@@ -52,13 +52,13 @@ Code Requirements:
 Command Line Interface:
 - Execution:
 	- uv run python -u -m src.main run={run_id} results_dir={path} mode=full
-	- uv run python -u -m src.main run={run_id} results_dir={path} mode=sanity_check
+	- uv run python -u -m src.main run={run_id} results_dir={path} mode=sanity
 	- uv run python -u -m src.main run={run_id} results_dir={path} mode=pilot
 - Evaluation:
   - uv run python -u -m src.evaluate results_dir={path} run_ids='["run-1", "run-2"]'
 
 Mode Behavior:
-- sanity_check:
+- sanity:
   - For training: epochs=1, batches=1-2, wandb.mode=online, optuna.n_trials=0
   - For inference: samples=5-10, wandb.mode=online
 	- For other tasks: minimal execution to verify functionality

@@ -19,7 +19,7 @@ on:
         required: true
         type: choice
         options:
-          - sanity_check
+          - sanity
           - pilot
           - main
       run_id:
