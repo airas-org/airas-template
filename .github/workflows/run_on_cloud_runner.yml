@@ -115,7 +115,7 @@ jobs:
   # Instance teardown is handled by the on-instance watchdog.
   # ------------------------------------------------------------------
   dispatch-target:
-    name: Dispatch ${{ env.TARGET_WORKFLOW }}
+    name: Dispatch Experiment workflow
     needs: [start-runner]
     runs-on: ubuntu-latest
     steps:
