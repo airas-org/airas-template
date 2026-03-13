@@ -46,6 +46,9 @@ on:
         required: false
         default: '120'
 
+env:
+  TARGET_WORKFLOW: run_experiment.yml
+
 permissions:
   id-token: write
   contents: write
@@ -112,7 +115,7 @@ jobs:
   # Instance teardown is handled by the on-instance watchdog.
   # ------------------------------------------------------------------
   dispatch-target:
-    name: Dispatch ${{ inputs.target_workflow }}
+    name: Dispatch ${{ env.TARGET_WORKFLOW }}
     needs: [start-runner]
     runs-on: ubuntu-latest
     steps:
@@ -127,13 +130,13 @@ jobs:
 
           RUNNER_LABEL='["${{ needs.start-runner.outputs.runner-label }}"]'
 
-          echo "Dispatching run_experiment.yml with:"
+          echo "Dispatching ${TARGET_WORKFLOW} with:"
           echo "  mode: ${{ inputs.mode }}"
           echo "  branch: ${BRANCH}"
           echo "  run_id: ${{ inputs.run_id }}"
           echo "  runner_label: ${RUNNER_LABEL}"
 
-          gh workflow run "run_experiment.yml" \
+          gh workflow run "${TARGET_WORKFLOW}" \
             --repo "${{ github.repository }}" \
             --ref "${BRANCH}" \
             -f mode="${{ inputs.mode }}" \
