@@ -467,10 +467,30 @@ cmd_start() {
   esac
 
   if ! wait_for_runner_online; then
-    log "ERROR: Runner failed to come online. Cleaning up instance..."
+    log "ERROR: Runner failed to come online. Dumping instance console output..."
     case "$provider" in
-      aws) aws_stop "$instance_id" ;;
-      gcp) gcp_stop "$instance_id" ;;
+      aws)
+        # Retrieve serial console output for debugging before termination
+        local console_output
+        console_output=$(aws ec2 get-console-output \
+          --region "${AWS_DEFAULT_REGION}" \
+          --instance-id "$instance_id" \
+          --output text 2>/dev/null || echo "(failed to retrieve console output)")
+        log "=== BEGIN CONSOLE OUTPUT ==="
+        echo "$console_output" >&2
+        log "=== END CONSOLE OUTPUT ==="
+        aws_stop "$instance_id"
+        ;;
+      gcp)
+        local console_output
+        console_output=$(gcloud compute instances get-serial-port-output "$instance_id" \
+          --project="${GCP_PROJECT}" \
+          --zone="${GCP_ZONE}" 2>/dev/null || echo "(failed to retrieve console output)")
+        log "=== BEGIN CONSOLE OUTPUT ==="
+        echo "$console_output" >&2
+        log "=== END CONSOLE OUTPUT ==="
+        gcp_stop "$instance_id"
+        ;;
     esac
     return 1
   fi
