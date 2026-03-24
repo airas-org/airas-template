@@ -1,5 +1,5 @@
 name: "Run Verification Code Generator"
-run-name: "🔬 Verification Code Generator"
+run-name: "🤖 Verification Code Generator"
 
 on:
   workflow_dispatch:
