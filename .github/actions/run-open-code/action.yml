@@ -3,7 +3,7 @@ description: "Setup OpenCode, resolve LLM provider, and run opencode with retry"
 
 inputs:
   model_name:
-    description: "Model name (e.g. openrouter/openai/gpt-5-nano)"
+    description: "Model name (e.g. openrouter/openai/gpt-5-nano, vercel/anthropic/claude-sonnet-4)"
     required: true
   prompt:
     description: "Prompt passed to opencode (ignored if prompt_file is provided)"
@@ -136,6 +136,17 @@ runs:
           openrouter/*)
             echo "PROVIDER=openrouter" >> "$GITHUB_ENV"
             echo "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}" >> "$GITHUB_ENV"
+            ;;
+
+          # Vercel AI Gateway fronts many vendors behind one key, so the
+          # model keeps its upstream vendor prefix after "vercel/"
+          # (e.g. vercel/anthropic/claude-sonnet-4). Match it before the
+          # bare vendor prefixes below.
+          vercel/*)
+            echo "PROVIDER=vercel" >> "$GITHUB_ENV"
+            # airas syncs the key under litellm's name; opencode reads
+            # AI_GATEWAY_API_KEY. Accept either.
+            echo "AI_GATEWAY_API_KEY=${AI_GATEWAY_API_KEY:-${VERCEL_AI_GATEWAY_API_KEY}}" >> "$GITHUB_ENV"
             ;;
 
           openai/*)
