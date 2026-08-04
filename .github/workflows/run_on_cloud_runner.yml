@@ -21,7 +21,7 @@ on:
         options:
           - sanity
           - pilot
-          - main
+          - full
       run_id:
         description: 'run_id to pass to the target workflow'
         required: true
