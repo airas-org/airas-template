@@ -56,6 +56,7 @@ jobs:
       LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      VERCEL_AI_GATEWAY_API_KEY: ${{ secrets.VERCEL_AI_GATEWAY_API_KEY }}
       WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
 
     steps:
@@ -151,6 +152,7 @@ jobs:
               -e LANGFUSE_SECRET_KEY \
               -e OPENAI_API_KEY \
               -e OPENROUTER_API_KEY \
+              -e VERCEL_AI_GATEWAY_API_KEY \
               -e WANDB_API_KEY \
               airas-experiment:latest \
               bash -c '
