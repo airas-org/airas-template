@@ -33,8 +33,14 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Figures keep their directory structure below each source directory, so
+      # LaTeX references them as images/<relative path>. This matches how
+      # compile_latex.yml materializes figures; a flat copy would silently
+      # overwrite same-named figures from different runs
+      # (e.g. results/run-1/accuracy.pdf vs results/run-2/accuracy.pdf).
       - name: Copy experiment images to LaTeX directory
         run: |
+          set -e
           echo "Using source directories: $SOURCE_DIR, $DIAGRAMS_DIR"
           echo "Target directory: $TARGET_IMG_DIR"
 
@@ -58,11 +64,12 @@ jobs:
 
           echo "Copying PDF images from$SEARCH_DIRS to $TARGET_IMG_DIR"
 
-          find $SEARCH_DIRS -type f -name "*.pdf" \
-            -exec cp {} "$TARGET_IMG_DIR/" \;
+          for dir in $SEARCH_DIRS; do
+            rsync -am --include='*/' --include='*.pdf' --exclude='*' "$dir/" "$TARGET_IMG_DIR/"
+          done
 
           echo "Image copy completed. Files in images/:"
-          ls -la "$TARGET_IMG_DIR/" || echo "No images present."
+          find "$TARGET_IMG_DIR" -type f | sort || echo "No images present."
 
       - name: Commit and push changes
         run: |

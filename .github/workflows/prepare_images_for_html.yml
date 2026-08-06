@@ -42,22 +42,26 @@ jobs:
 
           echo "Looking for PDFs in:$SEARCH_DIRS ..."
 
-          find $SEARCH_DIRS -type f -name "*.pdf" | while read pdf; do
-            name=$(basename "$pdf" .pdf)
-            echo "Converting $pdf to PNG..."
-            pdftoppm "$pdf" "$tmp_dir/${name}" -png
+          # Each PDF is converted in place under its own relative path so that
+          # same-named figures from different runs (e.g. results/run-1/accuracy.pdf
+          # and results/run-2/accuracy.pdf) do not overwrite each other.
+          for dir in $SEARCH_DIRS; do
+            find "$dir" -type f -name "*.pdf" -print0 | while IFS= read -r -d '' pdf; do
+              rel="${pdf#"$dir"/}"
+              out="$tmp_dir/${rel%.pdf}"
+              mkdir -p "$(dirname "$out")"
+              echo "Converting $pdf to PNG..."
+              pdftoppm "$pdf" "$out" -png
+            done
           done
 
-          if ls "$tmp_dir"/*-1.png 1> /dev/null 2>&1; then
-            for png in "$tmp_dir"/*-1.png; do
-              base=$(basename "$png" -1.png)
-              mv "$png" "$tmp_dir/${base}.png"
-            done
-          fi
+          find "$tmp_dir" -type f -name "*-1.png" -print0 | while IFS= read -r -d '' png; do
+            mv "$png" "${png%-1.png}.png"
+          done
 
       - name: Copy converted PNGs to gh-pages branch
         run: |
-          if [ -z "$(ls -A /tmp/output_images/*.png 2>/dev/null)" ]; then
+          if [ -z "$(find /tmp/output_images -type f -name '*.png' -print -quit 2>/dev/null)" ]; then
             echo "No PNG images were generated."
             exit 0
           fi
@@ -67,7 +71,7 @@ jobs:
 
           target_dir="branches/${{ github.ref_name }}/images"
           mkdir -p "$target_dir"
-          cp /tmp/output_images/*.png "$target_dir"
+          rsync -am --include='*/' --include='*.png' --exclude='*' /tmp/output_images/ "$target_dir/"
 
       - name: Commit and push to gh-pages
         run: |
