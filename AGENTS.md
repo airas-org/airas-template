@@ -14,7 +14,9 @@ by a GitHub Actions workflow.
 
 - `.research/research_history.json` — the research state produced by AIRAS:
   research topic, hypothesis, and the experimental design your code must
-  implement. **Read this first.**
+  implement. **Read this first.** In a fresh template repository this file is
+  `{}` — valid JSON with nothing written yet. Treat that as "no research
+  context available", not as an error.
 - `.research/results/` — the results directory (`results_dir`) that runs
   write into.
 
