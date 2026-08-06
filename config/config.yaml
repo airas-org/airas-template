@@ -5,8 +5,8 @@ defaults:
   - _self_
   - run: ???  # loads from config/run/, accessible as 'run=' in CLI
 
-# Execution mode: main, sanity, or pilot
-mode: main
+# Execution mode: full, sanity, or pilot
+mode: full
 
 # Results output directory
 results_dir: .research/results
