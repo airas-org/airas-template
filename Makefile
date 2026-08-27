@@ -12,25 +12,29 @@ EVAL_PLAN        ?= .research/evaluation.json
 AIRAS_EVAL_TASKS ?= $(shell python3 -c 'import json,sys; d=json.load(open("$(EVAL_PLAN)")); print(" ".join(d.get("task_types", [])))')
 AIRAS_EVAL        = uv run --group eval airas-eval
 
-.PHONY: evaluate validate-inputs list-tasks
+.PHONY: evaluate validate-inputs schema list-tasks
 
 ## Score every task type in the plan for one run: make evaluate RUN_ID=<run_id>
 evaluate: _require_run_id _require_tasks
 	@mkdir -p "$(RESULTS_DIR)/$(RUN_ID)/evaluation"
 	@for t in $(AIRAS_EVAL_TASKS); do \
-	  echo "=== [AIRAS-EVAL] $$t for $(RUN_ID)"; \
-	  $(AIRAS_EVAL) score $$t \
-	    --inputs "$(RESULTS_DIR)/$(RUN_ID)/eval_inputs/$$t.json" \
-	    --output "$(RESULTS_DIR)/$(RUN_ID)/evaluation/$$t.json" || exit 1; \
+		echo "=== [AIRAS-EVAL] $$t for $(RUN_ID)"; \
+		$(AIRAS_EVAL) score $$t \
+			--inputs "$(RESULTS_DIR)/$(RUN_ID)/eval_inputs/$$t.json" \
+			--output "$(RESULTS_DIR)/$(RUN_ID)/evaluation/$$t.json" || exit 1; \
 	done
 
 ## Check the input files against the contract without scoring
 validate-inputs: _require_run_id _require_tasks
 	@for t in $(AIRAS_EVAL_TASKS); do \
-	  $(AIRAS_EVAL) validate $$t --inputs "$(RESULTS_DIR)/$(RUN_ID)/eval_inputs/$$t.json" || exit 1; \
+		$(AIRAS_EVAL) validate $$t --inputs "$(RESULTS_DIR)/$(RUN_ID)/eval_inputs/$$t.json" || exit 1; \
 	done
 
-## Print what each planned task type takes (inputs, types, constraints) and returns
+## Print the JSON Schema of the input file(s) the experiment must produce
+schema: _require_tasks
+	@for t in $(AIRAS_EVAL_TASKS); do $(AIRAS_EVAL) schema $$t; done
+
+## Print what each planned task type returns
 list-tasks: _require_tasks
 	@for t in $(AIRAS_EVAL_TASKS); do $(AIRAS_EVAL) list $$t; done
 
