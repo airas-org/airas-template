@@ -12,7 +12,7 @@ EVAL_PLAN        ?= .research/evaluation.json
 AIRAS_EVAL_TASKS ?= $(shell python3 -c 'import json,sys; d=json.load(open("$(EVAL_PLAN)")); print(" ".join(d.get("task_types", [])))')
 AIRAS_EVAL        = uv run --group eval airas-eval
 
-.PHONY: evaluate validate-inputs schema list-tasks
+.PHONY: evaluate validate-inputs list-tasks
 
 ## Score every task type in the plan for one run: make evaluate RUN_ID=<run_id>
 evaluate: _require_run_id _require_tasks
@@ -30,7 +30,7 @@ validate-inputs: _require_run_id _require_tasks
 	  $(AIRAS_EVAL) validate $$t --inputs "$(RESULTS_DIR)/$(RUN_ID)/eval_inputs/$$t.json" || exit 1; \
 	done
 
-## Print what each planned task type returns
+## Print what each planned task type takes (inputs, types, constraints) and returns
 list-tasks: _require_tasks
 	@for t in $(AIRAS_EVAL_TASKS); do $(AIRAS_EVAL) list $$t; done
 
