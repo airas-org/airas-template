@@ -125,7 +125,9 @@ decreasing loss, or ≥50 samples with a finite primary metric).
 - If Optuna is used, run the search first, then train once with the best
   parameters; do not log intermediate trials to W&B.
 - Keep `pyproject.toml` limited to required dependencies
-  (hydra-core, wandb, plus task-specific libraries).
+  (hydra-core, wandb, plus task-specific libraries). After changing
+  dependencies run `uv lock` and commit `uv.lock` — it is what makes a clone
+  reproduce the same environment (and the same evaluation numbers).
 
 ## Evaluation contract (airas-eval)
 
@@ -136,15 +138,17 @@ the choice of metrics and metric variants from the experiment entirely.
 
 - `.research/evaluation.json` (written by AIRAS with the research plan) names
   the task types to evaluate, e.g.
-  `{"task_types": ["nas_pre_training", "nas_post_training"], "airas_eval_version": "0.4.2"}`.
-  In a fresh template it is `{}`.
+  `{"task_types": ["nas_pre_training", "nas_post_training"]}`. In a fresh
+  template it holds the placeholder `{"task_types": ["REPLACE_ME"]}`, which
+  the evaluation step rejects — do not edit it yourself. The evaluator version is the `airas-eval==X.Y.Z` pin
+  in `pyproject.toml` (managed by AIRAS / Dependabot; do not change it).
 - For every `run_id` and every planned task type, your code must write the
   evaluation inputs file
   `{results_dir}/{run_id}/eval_inputs/{task_type}.json` — the raw predictions,
   labels, search trajectories, etc., in the shape the contract requires. Learn
   the shape from the CLI, not from source:
-  `make schema` (JSON Schema per task type, with field descriptions) and
-  `make list-tasks` (what each task type returns).
+  `make list-tasks` (inputs with types and constraints, and every metric with
+  the inputs it needs; `airas-eval list --json <task>` adds the JSON Schema).
 - Check your files with `make validate-inputs RUN_ID={run_id}` and look at
   scores with `make evaluate RUN_ID={run_id}` (writes
   `{results_dir}/{run_id}/evaluation/{task_type}.json`). Metrics that cannot
