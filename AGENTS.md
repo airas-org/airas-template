@@ -37,9 +37,9 @@ Edit or create ONLY these files:
 | `src/evaluate.py` | Independent evaluation/aggregation script |
 | `pyproject.toml` | Dependencies only |
 
-Do not create or modify files outside this list (workflows under `.github/`,
-`Makefile` and `.research/evaluation.json` are managed by AIRAS). Everything
-must run on a Linux runner.
+Do not create or modify files outside this list (workflows under `.github/`
+are managed by AIRAS). Everything must run on a Linux runner.
+
 
 ## Command-line contract
 
@@ -125,41 +125,7 @@ decreasing loss, or ≥50 samples with a finite primary metric).
 - If Optuna is used, run the search first, then train once with the best
   parameters; do not log intermediate trials to W&B.
 - Keep `pyproject.toml` limited to required dependencies
-  (hydra-core, wandb, plus task-specific libraries). After changing
-  dependencies run `uv lock` and commit `uv.lock` — it is what makes a clone
-  reproduce the same environment (and the same evaluation numbers).
-
-## Evaluation contract (airas-eval)
-
-Metrics are **not computed by experiment code**. They are computed by
-[airas-eval](https://github.com/airas-org/airas-eval), a pinned, separately
-versioned evaluation layer, from raw inputs your code writes. This removes
-the choice of metrics and metric variants from the experiment entirely.
-
-- `.research/evaluation.json` (written by AIRAS with the research plan) names
-  the task types to evaluate, e.g.
-  `{"task_types": ["nas_pre_training", "nas_post_training"]}`. In a fresh
-  template it holds the placeholder `{"task_types": ["REPLACE_ME"]}`, which
-  the evaluation step rejects — do not edit it yourself. The evaluator version is the `airas-eval==X.Y.Z` pin
-  in `pyproject.toml` (managed by AIRAS / Dependabot; do not change it).
-- For every `run_id` and every planned task type, your code must write the
-  evaluation inputs file
-  `{results_dir}/{run_id}/eval_inputs/{task_type}.json` — the raw predictions,
-  labels, search trajectories, etc., in the shape the contract requires. Learn
-  the shape from the CLI, not from source:
-  `make list-tasks` (inputs with types and constraints, and every metric with
-  the inputs it needs; `airas-eval list --json <task>` adds the JSON Schema).
-- Check your files with `make validate-inputs RUN_ID={run_id}` and look at
-  scores with `make evaluate RUN_ID={run_id}` (writes
-  `{results_dir}/{run_id}/evaluation/{task_type}.json`). Metrics that cannot
-  be computed are listed under `skipped` with a reason code — omitting an
-  optional input (e.g. probabilities) is recorded, never silent.
-- **Never `import airas_eval`** in `src/` and never write metric code that
-  duplicates it. The official scores are recomputed by AIRAS from the same
-  `eval_inputs` files in an environment the agent cannot edit; numbers
-  computed inside the experiment are not used.
-- `src/evaluate.py` remains the place for run aggregation / figures from W&B;
-  headline metrics must come from `evaluation/*.json`.
+  (hydra-core, wandb, plus task-specific libraries).
 
 ## Recommended workflow for local coding agents
 
@@ -168,8 +134,8 @@ the choice of metrics and metric variants from the experiment entirely.
 3. Syntax-check everything you wrote (`ast.parse` for `.py`,
    `yaml.safe_load` for `.yaml`, `tomllib.load` for `pyproject.toml`).
 4. Run `mode=sanity` locally and iterate until it prints
-   `SANITY_VALIDATION: PASS`, then `make validate-inputs RUN_ID=...` until the
-   evaluation inputs pass the contract.
+   `SANITY_VALIDATION: PASS`.
+
 5. Commit and push to the experiment branch.
 6. Dispatch GPU-scale runs (`pilot` / `full`) through AIRAS
    (`dispatch_experiment`), which executes this repository on GitHub
