@@ -29,7 +29,7 @@ COPY uv.lock* ./
 
 # Install Python dependencies using uv
 # This layer will be cached unless dependencies change
-RUN uv sync --frozen || uv sync
+RUN uv sync --frozen --group eval || uv sync --group eval
 
 # Copy the rest of the application
 COPY . .
