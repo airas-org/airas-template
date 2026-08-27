@@ -30,10 +30,6 @@ validate-inputs: _require_run_id _require_tasks
 	  $(AIRAS_EVAL) validate $$t --inputs "$(RESULTS_DIR)/$(RUN_ID)/eval_inputs/$$t.json" || exit 1; \
 	done
 
-## Print the JSON Schema of the input file(s) the experiment must produce
-schema: _require_tasks
-	@for t in $(AIRAS_EVAL_TASKS); do $(AIRAS_EVAL) schema $$t; done
-
 ## Print what each planned task type returns
 list-tasks: _require_tasks
 	@for t in $(AIRAS_EVAL_TASKS); do $(AIRAS_EVAL) list $$t; done
