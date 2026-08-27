@@ -20,4 +20,4 @@ package = false
 # reproducible; experiment code must NOT import airas_eval — it is invoked only
 # through `make evaluate` / the airas-eval CLI on the eval_inputs files.
 [dependency-groups]
-eval = ["airas-eval==0.4.2"]
+eval = ["airas-eval==0.7.0"]
