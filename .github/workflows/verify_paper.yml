@@ -52,7 +52,7 @@ jobs:
         env:
           SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
         run: |
-          uvx --from "airas @ git+https://github.com/airas-org/airas.git@develop#subdirectory=backend" \
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
             airas verify-paper --local-path . --output-dir paper-artifact
 
       - name: Upload verification report and PDF
