@@ -1,0 +1,64 @@
+name: "Verify Paper"
+run-name: "🔎 Verify paper integrity and build PDF"
+
+on:
+  push:
+    paths:
+      - ".research/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verify-and-build:
+    name: Verify values and provenance, build PDF
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history: the provenance check requires the declared run's
+          # commit to be an ancestor of HEAD, which a shallow clone cannot
+          # answer.
+          fetch-depth: 0
+
+      - name: Install LaTeX toolchain
+        uses: Wandalen/wretry.action@v3
+        with:
+          attempt_limit: 3
+          attempt_delay: 30000
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y \
+              texlive-base \
+              texlive-latex-recommended \
+              texlive-fonts-recommended \
+              texlive-latex-extra \
+              texlive-science \
+              texlive-luatex \
+              texlive-lang-japanese
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Verify paper values and provenance, build PDF
+        env:
+          SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
+        run: |
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
+            airas verify-paper --local-path . --output-dir paper-artifact
+
+      - name: Upload verification report and PDF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-paper-${{ github.sha }}
+          path: paper-artifact/
+          if-no-files-found: ignore
