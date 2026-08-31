@@ -1,21 +1,3 @@
-# The paper integrity gate.
-#
-# Re-runs, against this exact commit, the same verification `verify_latex`
-# runs locally — recompute every declared value from the run outputs, diff
-# values.tex against a regeneration, require every \airasval key to be
-# defined, and cross-check the local metrics files against the Seyval run
-# declared in .research/results/.provenance.json — and then builds the PDF
-# from the same checked-out tree.
-#
-# Verification and compilation are one job on purpose: the artifact of a
-# green run is the only PDF that provably came from a state that passed,
-# so "the paper" can be defined as "the artifact of a green run of this
-# workflow", referenced by commit SHA. A local "it passed" is the agent's
-# own claim; this run is not.
-#
-# Unlike compile_latex.yml (an agent-driven fix loop), this workflow is
-# deterministic, runs no agent, and never pushes: contents permission is
-# read-only.
 name: "Verify Paper"
 run-name: "🔎 Verify paper integrity and build PDF"
 
@@ -68,18 +50,12 @@ jobs:
 
       - name: Verify paper values and provenance, build PDF
         env:
-          # Read access to Seyval's per-run storage, for the provenance
-          # cross-check. Without it the check reports "unavailable", which
-          # this gate treats as a failure — an unverifiable paper must not
-          # ship with a green check.
           SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
         run: |
           uvx --from "airas @ git+https://github.com/airas-org/airas.git@develop#subdirectory=backend" \
             airas verify-paper --local-path . --output-dir paper-artifact
 
       - name: Upload verification report and PDF
-        # The report is uploaded even when the gate fails, so a red run
-        # still explains itself; a failed run's artifact contains no PDF.
         if: always()
         uses: actions/upload-artifact@v4
         with:
