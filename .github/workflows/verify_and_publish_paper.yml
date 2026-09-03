@@ -1,5 +1,5 @@
-name: "Verify Paper"
-run-name: "🔎 Verify paper integrity and build PDF"
+name: "Verify and Publish Paper"
+run-name: "🔎 Verify the paper and publish the artifact of record"
 
 on:
   push:
@@ -55,6 +55,9 @@ jobs:
           uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
             airas verify-paper --local-path . --output-dir paper-artifact
 
+      # Always uploaded, but the gate deletes the PDF when verification
+      # fails, so a red run publishes the report alone — the PDF exists only
+      # for a paper that passed.
       - name: Upload verification report and PDF
         if: always()
         uses: actions/upload-artifact@v4
