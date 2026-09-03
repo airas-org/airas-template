@@ -1,10 +1,22 @@
-name: "Verify and Publish Paper"
-run-name: "🔎 Verify the paper and publish the artifact of record"
+name: "Publish Paper"
+run-name: "📄 Build the paper and publish the artifact of record"
 
+# Runs on the protected branch only. Every sha there has already passed
+# "Verify the record" -- branch protection requires it -- and that check
+# covers the paper's numbers as well as the record, so what is left to do
+# here is compile and publish. That ordering ("verify green, then publish")
+# comes from the protection rule, not from coupling this workflow to the
+# other one; a workflow_run trigger would add three GitHub-specific traps
+# to guarantee something the branch already guarantees.
+#
+# Not a required check, so it may filter to the paths it actually reads.
 on:
   push:
+    branches: [main]
     paths:
-      - ".research/**"
+      - ".research/latex/**"
+      - ".research/record.json"
+      - ".research/results/**"
   workflow_dispatch:
 
 permissions:
@@ -15,8 +27,13 @@ defaults:
     shell: bash
 
 jobs:
-  verify-and-build:
-    name: Verify values and provenance, build PDF
+  # `airas verify-paper` re-runs every check before compiling and deletes
+  # the PDF if any fails. On a protected branch that is redundant with the
+  # gate, and cheap; it is kept as the safety net for a repository whose
+  # protection was never configured, so an unverified paper is still not
+  # published as though it were.
+  publish-paper:
+    name: Build and publish the paper
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -29,7 +46,18 @@ jobs:
           # answer.
           fetch-depth: 0
 
+      - name: Look for a paper
+        id: paper
+        run: |
+          if compgen -G ".research/latex/*/main.tex" > /dev/null; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No .research/latex/*/main.tex — nothing to build yet."
+          fi
+
       - name: Install LaTeX toolchain
+        if: steps.paper.outputs.present == 'true'
         uses: Wandalen/wretry.action@v3
         with:
           attempt_limit: 3
@@ -46,9 +74,11 @@ jobs:
               texlive-lang-japanese
 
       - name: Install uv
+        if: steps.paper.outputs.present == 'true'
         uses: astral-sh/setup-uv@v5
 
       - name: Verify paper values and provenance, build PDF
+        if: steps.paper.outputs.present == 'true'
         env:
           SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
         run: |
@@ -59,7 +89,7 @@ jobs:
       # fails, so a red run publishes the report alone — the PDF exists only
       # for a paper that passed.
       - name: Upload verification report and PDF
-        if: always()
+        if: always() && steps.paper.outputs.present == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: verified-paper-${{ github.sha }}

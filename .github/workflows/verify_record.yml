@@ -1,0 +1,68 @@
+name: "Verify Record"
+run-name: "🔎 Verify the record"
+
+# The required check on the protected branch. It runs on every push with no
+# `paths:` filter, on purpose: a required check that does not run reports
+# nothing, so a commit touching only `src/` would leave it pending forever
+# and could never land. Filtering is what path filters are for; gating is
+# not.
+#
+# This is the whole integrity verdict. When a paper exists it checks the
+# paper's numbers too -- values.tex against its regeneration, declared
+# tables, every \airasval key declared -- none of which needs LaTeX. The
+# compile is publish_paper.yml's job, and that runs on the protected branch
+# only, so "verify green, then publish" is enforced by the branch rule.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # Meaningful from the first commit — including the ones that write the
+  # experiment code and import run outputs, which is exactly when an
+  # unguarded branch would matter. Green on a repository that has no record
+  # at all: nothing there to contradict. A paper, once one exists, must
+  # have a record and match it.
+  verify-record:
+    name: Verify the record
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history: the record's containment check walks every past
+          # revision of record.json, and the provenance check requires the
+          # declared run's commit to be an ancestor of HEAD. A shallow
+          # clone can answer neither.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      # No LaTeX toolchain here on purpose: this job sits in front of every
+      # commit and has to stay fast enough for that.
+      - name: Verify record against run outputs, history and Seyval
+        env:
+          SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
+        run: |
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
+            airas verify-record --local-path . --output-dir record-artifact
+
+      # Uploaded on red as well, so a failure is readable and not only a
+      # colour.
+      - name: Upload record verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-record-${{ github.sha }}
+          path: record-artifact/
+          if-no-files-found: ignore
