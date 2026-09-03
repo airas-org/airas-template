@@ -1,10 +1,13 @@
 name: "Verify and Publish Paper"
-run-name: "🔎 Verify the paper and publish the artifact of record"
+run-name: "🔎 Verify the record, and the paper when there is one"
 
+# No `paths:` filter. This workflow provides the check that guards the
+# protected branch, and a required check that does not run reports nothing —
+# a commit touching only `src/` would leave it pending forever and the push
+# could never land. Filtering is what a path filter is for; gating is not.
 on:
   push:
-    paths:
-      - ".research/**"
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -15,8 +18,50 @@ defaults:
     shell: bash
 
 jobs:
-  verify-and-build:
-    name: Verify values and provenance, build PDF
+  # The required check. Needs no paper, so it is meaningful from the first
+  # commit — including the ones that write the experiment code and import
+  # run outputs, which is exactly when an unguarded branch would matter.
+  verify-record:
+    name: Verify the record
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history: the record's containment check walks every past
+          # revision of record.json, and the provenance check requires the
+          # declared run's commit to be an ancestor of HEAD. A shallow
+          # clone can answer neither.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      # No LaTeX toolchain installed here on purpose: this job must stay
+      # fast enough to sit in front of every commit.
+      - name: Verify record against run outputs, history and Seyval
+        env:
+          SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
+        run: |
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
+            airas verify-record --local-path . --output-dir record-artifact
+
+      - name: Upload record verification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-record-${{ github.sha }}
+          path: record-artifact/
+          if-no-files-found: ignore
+
+  # The paper's own checks and the PDF. Runs only once the record is green:
+  # a PDF built on a record that failed verification would be a document
+  # nobody should read, published as though it were the result.
+  build-paper:
+    name: Verify paper values, build PDF
+    needs: verify-record
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -24,12 +69,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # Full history: the provenance check requires the declared run's
-          # commit to be an ancestor of HEAD, which a shallow clone cannot
-          # answer.
           fetch-depth: 0
 
+      - name: Look for a paper
+        id: paper
+        run: |
+          if compgen -G ".research/latex/*/main.tex" > /dev/null; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No .research/latex/*/main.tex — nothing to build yet."
+          fi
+
       - name: Install LaTeX toolchain
+        if: steps.paper.outputs.present == 'true'
         uses: Wandalen/wretry.action@v3
         with:
           attempt_limit: 3
@@ -46,9 +99,11 @@ jobs:
               texlive-lang-japanese
 
       - name: Install uv
+        if: steps.paper.outputs.present == 'true'
         uses: astral-sh/setup-uv@v5
 
       - name: Verify paper values and provenance, build PDF
+        if: steps.paper.outputs.present == 'true'
         env:
           SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
         run: |
@@ -59,7 +114,7 @@ jobs:
       # fails, so a red run publishes the report alone — the PDF exists only
       # for a paper that passed.
       - name: Upload verification report and PDF
-        if: always()
+        if: always() && steps.paper.outputs.present == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: verified-paper-${{ github.sha }}
