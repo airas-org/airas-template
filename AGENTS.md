@@ -18,7 +18,16 @@ by a GitHub Actions workflow.
   `{}` — valid JSON with nothing written yet. Treat that as "no research
   context available", not as an error.
 - `.research/results/` — the results directory (`results_dir`) that runs
-  write into.
+  write into. Per run, verification expects all three:
+
+  | Path | Written by | Role |
+  | --- | --- | --- |
+  | `{run_id}/eval_inputs/<task>.json` | `src/main.py` | raw predictions — what the metrics can be re-derived from |
+  | `{run_id}/evaluation/<task>.json` | `make evaluate` | airas-eval's verdict, with its versions and `skipped` |
+  | `{run_id}/metrics.json` | `src/evaluate.py` | the metrics the record is checked against |
+
+  Keep `eval_inputs/` in the committed results: the record anchors it by
+  hash, and without it nothing can be re-derived from anything.
 
 ## Repository layout and which files to touch
 
@@ -51,11 +60,24 @@ uv run python -u -m src.main run={run_id} results_dir=.research/results mode=pil
 uv run python -u -m src.main run={run_id} results_dir=.research/results mode=full
 ```
 
-Evaluation (independent, aggregates finished runs via the W&B API):
+Evaluation (independent, aggregates finished runs from the airas-eval reports):
 
 ```bash
 uv run python -u -m src.evaluate results_dir=.research/results run_ids='["run-1", "run-2"]'
 ```
+
+A run is only finished once the evaluation has run on it:
+
+```bash
+make evaluate RUN_ID={run_id}          # airas-eval -> evaluation/<task>.json
+uv run python -u -m src.evaluate results_dir=.research/results run_ids='["{run_id}"]'
+```
+
+`src.main` alone writes `eval_inputs/` and nothing else. Verification
+byte-compares `metrics.json` against the execution platform's stored copy,
+so a run that stops after `src.main` succeeds and still fails verification,
+with nothing in the error pointing at the cause. Whatever dispatches the
+run must carry it through all three steps.
 
 These exact invocations are what the `run_experiment.yml` workflow and
 external executors call. Do not change the CLI shape.
@@ -106,17 +128,25 @@ decreasing loss, or ≥50 samples with a finite primary metric).
 
 - **PyTorch exclusively** for deep learning; **Hydra** for configuration
   (`@hydra.main(config_path="../config")`, executed from repo root).
-- **W&B is required** in online modes:
-  `wandb.init(entity=cfg.wandb.entity, project=cfg.wandb.project, name=cfg.run.run_id, config=OmegaConf.to_container(cfg, resolve=True))`.
-  Save final metrics to `wandb.summary` and print the run URL to stdout.
+- **W&B is auxiliary logging, not a source of reported numbers.** When
+  credentials exist, `wandb.init(entity=cfg.wandb.entity,
+  project=cfg.wandb.project, name=cfg.run.run_id,
+  config=OmegaConf.to_container(cfg, resolve=True))` and print the run URL;
+  a failed `wandb.init` must never fail the experiment, and `mode: offline`
+  must work. Nothing in `metrics.json` may come from W&B.
 - `src/main.py` is an orchestrator only: it applies mode overrides and
   invokes `train.py` / `inference.py` as a subprocess. Do not mix training
   or inference logic into it.
-- `src/evaluate.py` fetches run history from the W&B API by display name,
-  writes `{results_dir}/{run_id}/metrics.json`, per-run figures (PDF), and
-  `{results_dir}/comparison/aggregated_metrics.json`
+- `src/evaluate.py` copies the metrics **airas-eval** computed
+  (`{results_dir}/{run_id}/evaluation/<task_type>.json`) into
+  `{results_dir}/{run_id}/metrics.json`, and writes per-run figures (PDF)
+  and `{results_dir}/comparison/aggregated_metrics.json`
   (`primary_metric`, metrics by run_id, `best_proposed`, `best_baseline`,
-  `gap`) plus overlay comparison plots per common metric.
+  `gap`) plus overlay comparison plots per common metric. **It computes no
+  metric of its own.** airas-eval is the single source of the numbers
+  (see the Makefile); routing them through W&B instead would put values the
+  experiment code wrote into the file verification reads, which is the one
+  thing the fixed evaluation layer exists to prevent.
 - Use `.cache/` as `cache_dir` for datasets and models.
 - Prevent data leakage: labels must never be part of model inputs.
 - Method differences must show up in computation and results: never reuse
