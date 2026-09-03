@@ -1,11 +1,18 @@
-name: "Verify and Publish Paper"
-run-name: "📄 Verify the paper and publish the artifact of record"
+name: "Publish Paper"
+run-name: "📄 Build the paper and publish the artifact of record"
 
-# Not a required check, so it may filter: it only has something to say
-# when the paper or what the paper reads has changed. Guarding the branch
-# is verify_record.yml's job, which runs on every push unfiltered.
+# Runs on the protected branch only. Every sha there has already passed
+# "Verify the record" -- branch protection requires it -- and that check
+# covers the paper's numbers as well as the record, so what is left to do
+# here is compile and publish. That ordering ("verify green, then publish")
+# comes from the protection rule, not from coupling this workflow to the
+# other one; a workflow_run trigger would add three GitHub-specific traps
+# to guarantee something the branch already guarantees.
+#
+# Not a required check, so it may filter to the paths it actually reads.
 on:
   push:
+    branches: [main]
     paths:
       - ".research/latex/**"
       - ".research/record.json"
@@ -20,12 +27,13 @@ defaults:
     shell: bash
 
 jobs:
-  # Self-contained: `airas verify-paper` re-runs every record check before
-  # the paper's own, and deletes the PDF when any of them fails, so a PDF
-  # is never published on a record that did not verify — without needing
-  # to depend on the record workflow's run.
-  build-paper:
-    name: Verify paper values, build PDF
+  # `airas verify-paper` re-runs every check before compiling and deletes
+  # the PDF if any fails. On a protected branch that is redundant with the
+  # gate, and cheap; it is kept as the safety net for a repository whose
+  # protection was never configured, so an unverified paper is still not
+  # published as though it were.
+  publish-paper:
+    name: Build and publish the paper
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

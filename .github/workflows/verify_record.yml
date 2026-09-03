@@ -5,7 +5,13 @@ run-name: "🔎 Verify the record"
 # `paths:` filter, on purpose: a required check that does not run reports
 # nothing, so a commit touching only `src/` would leave it pending forever
 # and could never land. Filtering is what path filters are for; gating is
-# not. The paper's own workflow, which is not required, keeps its filter.
+# not.
+#
+# This is the whole integrity verdict. When a paper exists it checks the
+# paper's numbers too -- values.tex against its regeneration, declared
+# tables, every \airasval key declared -- none of which needs LaTeX. The
+# compile is publish_paper.yml's job, and that runs on the protected branch
+# only, so "verify green, then publish" is enforced by the branch rule.
 on:
   push:
   pull_request:
@@ -19,10 +25,11 @@ defaults:
     shell: bash
 
 jobs:
-  # Needs no paper, so it is meaningful from the first commit — including
-  # the ones that write the experiment code and import run outputs, which
-  # is exactly when an unguarded branch would matter. Green on a repository
-  # that has no record at all: nothing there to contradict.
+  # Meaningful from the first commit — including the ones that write the
+  # experiment code and import run outputs, which is exactly when an
+  # unguarded branch would matter. Green on a repository that has no record
+  # at all: nothing there to contradict. A paper, once one exists, must
+  # have a record and match it.
   verify-record:
     name: Verify the record
     runs-on: ubuntu-latest
