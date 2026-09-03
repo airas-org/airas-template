@@ -1,13 +1,15 @@
 name: "Verify and Publish Paper"
-run-name: "🔎 Verify the record, and the paper when there is one"
+run-name: "📄 Verify the paper and publish the artifact of record"
 
-# No `paths:` filter. This workflow provides the check that guards the
-# protected branch, and a required check that does not run reports nothing —
-# a commit touching only `src/` would leave it pending forever and the push
-# could never land. Filtering is what a path filter is for; gating is not.
+# Not a required check, so it may filter: it only has something to say
+# when the paper or what the paper reads has changed. Guarding the branch
+# is verify_record.yml's job, which runs on every push unfiltered.
 on:
   push:
-  pull_request:
+    paths:
+      - ".research/latex/**"
+      - ".research/record.json"
+      - ".research/results/**"
   workflow_dispatch:
 
 permissions:
@@ -18,50 +20,12 @@ defaults:
     shell: bash
 
 jobs:
-  # The required check. Needs no paper, so it is meaningful from the first
-  # commit — including the ones that write the experiment code and import
-  # run outputs, which is exactly when an unguarded branch would matter.
-  verify-record:
-    name: Verify the record
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          # Full history: the record's containment check walks every past
-          # revision of record.json, and the provenance check requires the
-          # declared run's commit to be an ancestor of HEAD. A shallow
-          # clone can answer neither.
-          fetch-depth: 0
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
-      # No LaTeX toolchain installed here on purpose: this job must stay
-      # fast enough to sit in front of every commit.
-      - name: Verify record against run outputs, history and Seyval
-        env:
-          SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
-        run: |
-          uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
-            airas verify-record --local-path . --output-dir record-artifact
-
-      - name: Upload record verification report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: verified-record-${{ github.sha }}
-          path: record-artifact/
-          if-no-files-found: ignore
-
-  # The paper's own checks and the PDF. Runs only once the record is green:
-  # a PDF built on a record that failed verification would be a document
-  # nobody should read, published as though it were the result.
+  # Self-contained: `airas verify-paper` re-runs every record check before
+  # the paper's own, and deletes the PDF when any of them fails, so a PDF
+  # is never published on a record that did not verify — without needing
+  # to depend on the record workflow's run.
   build-paper:
     name: Verify paper values, build PDF
-    needs: verify-record
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -69,6 +33,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          # Full history: the provenance check requires the declared run's
+          # commit to be an ancestor of HEAD, which a shallow clone cannot
+          # answer.
           fetch-depth: 0
 
       - name: Look for a paper
