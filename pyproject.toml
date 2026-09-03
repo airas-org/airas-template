@@ -1,6 +1,6 @@
 # Please list the required python packages in `dependencies` below.
 # Keep this file limited to dependencies (hydra-core, wandb, plus
-# task-specific libraries) — see AGENTS.md.
+# task-specific libraries).
 
 [project]
 name = "experiment"
