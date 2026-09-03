@@ -23,6 +23,7 @@ by a GitHub Actions workflow.
   | Path | Written by | Role |
   | --- | --- | --- |
   | `{run_id}/eval_inputs/<task>.json` | `src/main.py` | raw predictions — what the metrics can be re-derived from |
+  | `{run_id}/config.json` | `src/main.py` | the resolved configuration the run actually used |
   | `{run_id}/evaluation/<task>.json` | `make evaluate` | airas-eval's verdict, with its versions and `skipped` |
   | `{run_id}/metrics.json` | `src/evaluate.py` | the metrics the record is checked against |
 
@@ -137,6 +138,14 @@ decreasing loss, or ≥50 samples with a finite primary metric).
 - `src/main.py` is an orchestrator only: it applies mode overrides and
   invokes `train.py` / `inference.py` as a subprocess. Do not mix training
   or inference logic into it.
+- **`src/main.py` must write the resolved configuration** to
+  `{results_dir}/{run_id}/config.json`:
+  `json.dump(OmegaConf.to_container(cfg, resolve=True), ...)`. Write it into
+  the results directory, not next to the Hydra logs: only
+  `.research/results/` is collected back, so a config written anywhere else
+  never reaches the repository. Reporting the conditions an experiment ran
+  under is part of reporting the experiment — without this file a paper can
+  state a batch size the run never used and nothing contradicts it.
 - `src/evaluate.py` copies the metrics **airas-eval** computed
   (`{results_dir}/{run_id}/evaluation/<task_type>.json`) into
   `{results_dir}/{run_id}/metrics.json`, and writes per-run figures (PDF)
