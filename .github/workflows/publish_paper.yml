@@ -9,6 +9,22 @@ run-name: "📄 Build the paper and publish the artifact of record"
 # other one; a workflow_run trigger would add three GitHub-specific traps
 # to guarantee something the branch already guarantees.
 #
+# Publishing means two things: the PDF and its report are uploaded as the
+# run's artifact, and the same PDF bytes are committed back onto the
+# protected branch as `.research/latex/<template>/paper.pdf`, so the paper
+# of record outlives the artifact's retention and sits next to the sources
+# it was built from. That commit goes through the gate like any other: it
+# is pushed to a scratch ref, "Verify the record" runs on it, and only a
+# green check lets it fast-forward onto the branch.
+#
+# The pushes use GH_PERSONAL_ACCESS_TOKEN (provisioned by
+# prepare_repository), not the workflow's own token: a push made with
+# GITHUB_TOKEN starts no workflows, and a gate started by hand with
+# workflow_dispatch instead does not count as the required status check
+# (its check suite has no branch), so the protected branch rejects the
+# commit. The PAT's push to the branch re-triggers this workflow, which
+# the job-level guard on the commit message stops.
+#
 # Not a required check, so it may filter to the paths it actually reads.
 on:
   push:
@@ -35,7 +51,10 @@ jobs:
   publish-paper:
     name: Build and publish the paper
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+    # The PDF commit this workflow makes lands on the branch and would
+    # otherwise start it again (a fresh build differs in timestamps alone).
+    if: "${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'paper: CI-built PDF') }}"
 
     steps:
       - name: Checkout repository
@@ -45,6 +64,9 @@ jobs:
           # commit to be an ancestor of HEAD, which a shallow clone cannot
           # answer.
           fetch-depth: 0
+          # The PDF commit is pushed with the PAT below, not the token
+          # checkout would otherwise leave in the git config.
+          persist-credentials: false
 
       - name: Look for a paper
         id: paper
@@ -95,3 +117,89 @@ jobs:
           name: verified-paper-${{ github.sha }}
           path: paper-artifact/
           if-no-files-found: ignore
+
+      # The PDF the artifact holds, committed byte-for-byte next to its
+      # sources. The commit is made here, not by the agent: a PDF built on
+      # the agent's machine proves nothing, this one was built where the
+      # agent cannot intervene, from a sha the gate had already passed.
+      - name: Commit the CI-built PDF onto the protected branch
+        if: success() && steps.paper.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          pdf=$(ls paper-artifact/*.pdf 2>/dev/null | head -1 || true)
+          if [ -z "$pdf" ]; then
+            echo "No PDF to commit (verification removed it)."
+            exit 0
+          fi
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "GH_PERSONAL_ACCESS_TOKEN is not set as a repository secret;" \
+                 "the PDF stays in the artifact only (set_github_actions_secrets fixes this)."
+            exit 0
+          fi
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          template=$(basename "$(dirname "$(ls .research/latex/*/main.tex | head -1)")")
+          dest=".research/latex/$template/paper.pdf"
+          if [ -f "$dest" ] && cmp -s "$pdf" "$dest"; then
+            echo "$dest already holds this build."
+            exit 0
+          fi
+          cp "$pdf" "$dest"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$dest"
+          git commit -q \
+            -m "paper: CI-built PDF for ${GITHUB_SHA}" \
+            -m "Built by Publish Paper run ${GITHUB_RUN_ID} from ${GITHUB_SHA}; byte-identical to the artifact verified-paper-${GITHUB_SHA}."
+          sha=$(git rev-parse HEAD)
+          scratch="verify-paper-${GITHUB_SHA::12}"
+          echo "PDF commit $sha, staged on $scratch"
+
+          # The scratch ref stands in for the agent's `verify`: the push
+          # (a push event, so the gate starts on its own and its check
+          # counts) lets the required check run on this exact sha.
+          git push -q --force "$remote" "HEAD:refs/heads/$scratch"
+
+          state=pending
+          for _ in $(seq 1 60); do
+            sleep 20
+            state=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs" \
+              --jq '[.check_runs[] | select(.name == "Verify the record")]
+                    | if length == 0 then "pending"
+                      else (.[0] | if .status == "completed" then .conclusion else .status end) end')
+            echo "Verify the record on $sha: $state"
+            case "$state" in
+              success) break ;;
+              failure|cancelled|timed_out|action_required|stale)
+                echo "The gate rejected the PDF commit; nothing lands." >&2
+                exit 1 ;;
+            esac
+          done
+          if [ "$state" != success ]; then
+            echo "The gate did not finish in time; nothing lands." >&2
+            exit 1
+          fi
+
+          # Fast-forward only. If the branch moved meanwhile the push fails
+          # and the next Publish Paper run, on the new head, commits the PDF
+          # for that head instead. The check's success reaches the branch
+          # rule a few seconds after the check-runs API reports it, so a
+          # "Required status check ... is expected" rejection right after a
+          # green poll is retried before it counts as a failure.
+          landed=false
+          for _ in $(seq 1 12); do
+            if git push -q "$remote" "HEAD:refs/heads/${GITHUB_REF_NAME}"; then
+              landed=true
+              break
+            fi
+            echo "push not accepted yet; retrying"
+            sleep 10
+          done
+          if [ "$landed" != true ]; then
+            echo "The PDF commit did not land on ${GITHUB_REF_NAME}." >&2
+            exit 1
+          fi
+          git push -q "$remote" --delete "$scratch" || true
+          echo "paper.pdf for ${GITHUB_SHA} landed as $sha on ${GITHUB_REF_NAME}."
