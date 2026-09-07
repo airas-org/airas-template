@@ -65,7 +65,7 @@ jobs:
           parent=$(git rev-parse HEAD~1)
 
           runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${parent}&per_page=100" \
-            --jq '[.workflow_runs[] | select(.name == "Publish Paper" and (.conclusion == null or .conclusion == "success")) | .id] | .[]')
+            --jq '[.workflow_runs[] | select(.path == ".github/workflows/publish_paper.yml" and (.conclusion == null or .conclusion == "success")) | .id] | .[]')
           [ -n "$runs" ] || fail "no Publish Paper run built ${parent}; a paper.pdf commit must follow the run that produced it"
 
           artifact=""
