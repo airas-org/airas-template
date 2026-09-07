@@ -1,23 +1,6 @@
 name: "Verify Record"
 run-name: "🔎 Verify the record"
 
-# The required check on the protected branch. It runs on every push with no
-# `paths:` filter, on purpose: a required check that does not run reports
-# nothing, so a commit touching only `src/` would leave it pending forever
-# and could never land. Filtering is what path filters are for; gating is
-# not.
-#
-# This is the whole integrity verdict. When a paper exists it checks the
-# paper's numbers too -- values.tex against its regeneration, declared
-# tables, every \airasval key declared -- none of which needs LaTeX. The
-# compile is publish_paper.yml's job, and that runs on the protected branch
-# only, so "verify green, then publish" is enforced by the branch rule.
-#
-# It also judges paper.pdf, the one file no recomputation can check: a
-# commit that changes it must be the PDF a Publish Paper run built from its
-# parent, byte for byte, and nothing else. The evidence is the run's
-# artifact — a store only workflows can write — so a hand-built PDF pushed
-# with a look-alike commit message cannot land as the paper of record.
 on:
   push:
   pull_request:
@@ -25,8 +8,6 @@ on:
 
 permissions:
   contents: read
-  # The paper.pdf cross-check below reads Publish Paper runs and downloads
-  # their artifacts.
   actions: read
 
 defaults:
@@ -34,11 +15,6 @@ defaults:
     shell: bash
 
 jobs:
-  # Meaningful from the first commit — including the ones that write the
-  # experiment code and import run outputs, which is exactly when an
-  # unguarded branch would matter. Green on a repository that has no record
-  # at all: nothing there to contradict. A paper, once one exists, must
-  # have a record and match it.
   verify-record:
     name: Verify the record
     runs-on: ubuntu-latest
@@ -48,32 +24,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # Full history: the record's containment check walks every past
-          # revision of record.json, and the provenance check requires the
-          # declared run's commit to be an ancestor of HEAD. A shallow
-          # clone can answer neither.
           fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      # No LaTeX toolchain here on purpose: this job sits in front of every
-      # commit and has to stay fast enough for that.
       - name: Verify record against run outputs, history and Seyval
         env:
           SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
-        # The verdict is the exit code; the JSON report goes to stdout, so a
-        # red run is readable in the job log itself. Nothing downstream reads
-        # the report as a file, hence no artifact.
         run: |
           uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
             airas verify-record --local-path .
 
-      # paper.pdf is committed by publish_paper.yml from the PDF it uploaded
-      # as verified-paper-<sha>. That artifact is the anchor: the committed
-      # bytes must equal it, the commit must change nothing else, and the
-      # run that produced it must exist for the parent commit. Fails closed
-      # when the API cannot be reached — an unanswerable check is not a pass.
       - name: Cross-check paper.pdf against the Publish Paper artifact
         if: github.event_name == 'push'
         env:
@@ -102,9 +64,6 @@ jobs:
             || fail "paper.pdf cannot arrive in a root commit: no Publish Paper run can have built it"
           parent=$(git rev-parse HEAD~1)
 
-          # Every Publish Paper run on the parent that is still running or
-          # succeeded. The run that made this commit is normally in progress:
-          # it is waiting for this very check.
           runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${parent}&per_page=100" \
             --jq '[.workflow_runs[] | select(.name == "Publish Paper" and (.conclusion == null or .conclusion == "success")) | .id] | .[]')
           [ -n "$runs" ] || fail "no Publish Paper run built ${parent}; a paper.pdf commit must follow the run that produced it"
