@@ -30,12 +30,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # The PDF commit this workflow makes lands on the branch and would
-      # otherwise start it again (a fresh build differs in timestamps alone).
-      # The guard is the commit's diff, not its message: a commit that changes
-      # only paper.pdf is one the gate has already tied to a Publish Paper
-      # artifact (verify_record.yml), so there is nothing to rebuild. Any
-      # other commit — whatever its message says — gets built.
       - name: Decide whether this commit is our own PDF commit
         id: guard
         run: |
@@ -121,9 +115,8 @@ jobs:
             echo "$dest already holds this build."
             exit 0
           fi
+
           cp "$pdf" "$dest"
-          # The digest the gate compares against the artifact; kept in the
-          # run summary so it is readable after the artifact expires.
           digest=$(sha256sum "$pdf" | cut -d' ' -f1)
           echo "paper.pdf sha256 for ${GITHUB_SHA}: ${digest}"
           printf '### paper.pdf\n\n- built from: `%s`\n- sha256: `%s`\n- artifact: `verified-paper-%s`\n' \
