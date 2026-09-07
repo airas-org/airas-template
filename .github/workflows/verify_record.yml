@@ -12,6 +12,12 @@ run-name: "🔎 Verify the record"
 # tables, every \airasval key declared -- none of which needs LaTeX. The
 # compile is publish_paper.yml's job, and that runs on the protected branch
 # only, so "verify green, then publish" is enforced by the branch rule.
+#
+# It also judges paper.pdf, the one file no recomputation can check: a
+# commit that changes it must be the PDF a Publish Paper run built from its
+# parent, byte for byte, and nothing else. The evidence is the run's
+# artifact — a store only workflows can write — so a hand-built PDF pushed
+# with a look-alike commit message cannot land as the paper of record.
 on:
   push:
   pull_request:
@@ -19,6 +25,9 @@ on:
 
 permissions:
   contents: read
+  # The paper.pdf cross-check below reads Publish Paper runs and downloads
+  # their artifacts.
+  actions: read
 
 defaults:
   run:
@@ -59,3 +68,67 @@ jobs:
         run: |
           uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
             airas verify-record --local-path .
+
+      # paper.pdf is committed by publish_paper.yml from the PDF it uploaded
+      # as verified-paper-<sha>. That artifact is the anchor: the committed
+      # bytes must equal it, the commit must change nothing else, and the
+      # run that produced it must exist for the parent commit. Fails closed
+      # when the API cannot be reached — an unanswerable check is not a pass.
+      - name: Cross-check paper.pdf against the Publish Paper artifact
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+
+          if ! git rev-parse --verify -q HEAD~1 > /dev/null; then
+            changed=$(git show --name-only --format= HEAD)
+          else
+            changed=$(git diff --name-only HEAD~1 HEAD)
+          fi
+          pdf_re='^\.research/latex/[^/]+/paper\.pdf$'
+          pdfs=$(printf '%s\n' "$changed" | grep -E "$pdf_re" || true)
+          if [ -z "$pdfs" ]; then
+            echo "HEAD does not change paper.pdf; nothing to cross-check."
+            exit 0
+          fi
+
+          others=$(printf '%s\n' "$changed" | grep -v -E "$pdf_re" || true)
+          if [ -n "$others" ]; then
+            fail "a commit that changes paper.pdf may change nothing else; also touches: $(echo "$others" | tr '\n' ' ')"
+          fi
+          git rev-parse --verify -q HEAD~1 > /dev/null \
+            || fail "paper.pdf cannot arrive in a root commit: no Publish Paper run can have built it"
+          parent=$(git rev-parse HEAD~1)
+
+          # Every Publish Paper run on the parent that is still running or
+          # succeeded. The run that made this commit is normally in progress:
+          # it is waiting for this very check.
+          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${parent}&per_page=100" \
+            --jq '[.workflow_runs[] | select(.name == "Publish Paper" and (.conclusion == null or .conclusion == "success")) | .id] | .[]')
+          [ -n "$runs" ] || fail "no Publish Paper run built ${parent}; a paper.pdf commit must follow the run that produced it"
+
+          artifact=""
+          for run in $runs; do
+            artifact=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/artifacts" \
+              --jq ".artifacts[] | select(.name == \"verified-paper-${parent}\" and .expired == false) | .id" | head -1)
+            [ -n "$artifact" ] && break
+          done
+          [ -n "$artifact" ] || fail "no verified-paper-${parent} artifact on any Publish Paper run for ${parent}"
+
+          tmp=$(mktemp -d)
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact}/zip" > "$tmp/artifact.zip"
+          unzip -q "$tmp/artifact.zip" -d "$tmp/artifact"
+
+          for committed in $pdfs; do
+            template=$(basename "$(dirname "$committed")")
+            built="$tmp/artifact/${template}.pdf"
+            [ -f "$built" ] || fail "artifact verified-paper-${parent} holds no ${template}.pdf for ${committed}"
+            want=$(sha256sum "$built" | cut -d' ' -f1)
+            have=$(sha256sum "$committed" | cut -d' ' -f1)
+            if [ "$want" != "$have" ]; then
+              fail "${committed} (sha256 ${have}) is not the PDF Publish Paper built from ${parent} (sha256 ${want})"
+            fi
+            echo "${committed} is byte-identical to artifact verified-paper-${parent} (sha256 ${have})."
+          done
