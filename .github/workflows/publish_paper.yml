@@ -1,31 +1,6 @@
 name: "Publish Paper"
 run-name: "📄 Build the paper and publish the artifact of record"
 
-# Runs on the protected branch only. Every sha there has already passed
-# "Verify the record" -- branch protection requires it -- and that check
-# covers the paper's numbers as well as the record, so what is left to do
-# here is compile and publish. That ordering ("verify green, then publish")
-# comes from the protection rule, not from coupling this workflow to the
-# other one; a workflow_run trigger would add three GitHub-specific traps
-# to guarantee something the branch already guarantees.
-#
-# Publishing means two things: the PDF and its report are uploaded as the
-# run's artifact, and the same PDF bytes are committed back onto the
-# protected branch as `.research/latex/<template>/paper.pdf`, so the paper
-# of record outlives the artifact's retention and sits next to the sources
-# it was built from. That commit goes through the gate like any other: it
-# is pushed to a scratch ref, "Verify the record" runs on it, and only a
-# green check lets it fast-forward onto the branch.
-#
-# The pushes use GH_PERSONAL_ACCESS_TOKEN (provisioned by
-# prepare_repository), not the workflow's own token: a push made with
-# GITHUB_TOKEN starts no workflows, and a gate started by hand with
-# workflow_dispatch instead does not count as the required status check
-# (its check suite has no branch), so the protected branch rejects the
-# commit. The PAT's push to the branch re-triggers this workflow, which
-# the job-level guard on the commit message stops.
-#
-# Not a required check, so it may filter to the paths it actually reads.
 on:
   push:
     branches: [main]
@@ -43,29 +18,17 @@ defaults:
     shell: bash
 
 jobs:
-  # `airas verify-paper` re-runs every check before compiling and deletes
-  # the PDF if any fails. On a protected branch that is redundant with the
-  # gate, and cheap; it is kept as the safety net for a repository whose
-  # protection was never configured, so an unverified paper is still not
-  # published as though it were.
   publish-paper:
     name: Build and publish the paper
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # The PDF commit this workflow makes lands on the branch and would
-    # otherwise start it again (a fresh build differs in timestamps alone).
     if: "${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'paper: CI-built PDF') }}"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # Full history: the provenance check requires the declared run's
-          # commit to be an ancestor of HEAD, which a shallow clone cannot
-          # answer.
           fetch-depth: 0
-          # The PDF commit is pushed with the PAT below, not the token
-          # checkout would otherwise leave in the git config.
           persist-credentials: false
 
       - name: Look for a paper
@@ -107,9 +70,6 @@ jobs:
           uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
             airas verify-paper --local-path . --output-dir paper-artifact
 
-      # Always uploaded, but the gate deletes the PDF when verification
-      # fails, so a red run publishes the report alone — the PDF exists only
-      # for a paper that passed.
       - name: Upload verification report and PDF
         if: always() && steps.paper.outputs.present == 'true'
         uses: actions/upload-artifact@v4
@@ -118,10 +78,6 @@ jobs:
           path: paper-artifact/
           if-no-files-found: ignore
 
-      # The PDF the artifact holds, committed byte-for-byte next to its
-      # sources. The commit is made here, not by the agent: a PDF built on
-      # the agent's machine proves nothing, this one was built where the
-      # agent cannot intervene, from a sha the gate had already passed.
       - name: Commit the CI-built PDF onto the protected branch
         if: success() && steps.paper.outputs.present == 'true'
         env:
@@ -157,9 +113,6 @@ jobs:
           scratch="verify-paper-${GITHUB_SHA::12}"
           echo "PDF commit $sha, staged on $scratch"
 
-          # The scratch ref stands in for the agent's `verify`: the push
-          # (a push event, so the gate starts on its own and its check
-          # counts) lets the required check run on this exact sha.
           git push -q --force "$remote" "HEAD:refs/heads/$scratch"
 
           state=pending
@@ -182,12 +135,6 @@ jobs:
             exit 1
           fi
 
-          # Fast-forward only. If the branch moved meanwhile the push fails
-          # and the next Publish Paper run, on the new head, commits the PDF
-          # for that head instead. The check's success reaches the branch
-          # rule a few seconds after the check-runs API reports it, so a
-          # "Required status check ... is expected" rejection right after a
-          # green poll is retried before it counts as a failure.
           landed=false
           for _ in $(seq 1 12); do
             if git push -q "$remote" "HEAD:refs/heads/${GITHUB_REF_NAME}"; then
