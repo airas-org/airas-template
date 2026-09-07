@@ -53,16 +53,9 @@ jobs:
       - name: Verify record against run outputs, history and Seyval
         env:
           SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
+        # The verdict is the exit code; the JSON report goes to stdout, so a
+        # red run is readable in the job log itself. Nothing downstream reads
+        # the report as a file, hence no artifact.
         run: |
           uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
-            airas verify-record --local-path . --output-dir record-artifact
-
-      # Uploaded on red as well, so a failure is readable and not only a
-      # colour.
-      - name: Upload record verification report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: verified-record-${{ github.sha }}
-          path: record-artifact/
-          if-no-files-found: ignore
+            airas verify-record --local-path .
