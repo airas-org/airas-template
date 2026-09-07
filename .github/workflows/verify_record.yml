@@ -1,17 +1,6 @@
 name: "Verify Record"
 run-name: "🔎 Verify the record"
 
-# The required check on the protected branch. It runs on every push with no
-# `paths:` filter, on purpose: a required check that does not run reports
-# nothing, so a commit touching only `src/` would leave it pending forever
-# and could never land. Filtering is what path filters are for; gating is
-# not.
-#
-# This is the whole integrity verdict. When a paper exists it checks the
-# paper's numbers too -- values.tex against its regeneration, declared
-# tables, every \airasval key declared -- none of which needs LaTeX. The
-# compile is publish_paper.yml's job, and that runs on the protected branch
-# only, so "verify green, then publish" is enforced by the branch rule.
 on:
   push:
   pull_request:
@@ -19,17 +8,13 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  # Meaningful from the first commit — including the ones that write the
-  # experiment code and import run outputs, which is exactly when an
-  # unguarded branch would matter. Green on a repository that has no record
-  # at all: nothing there to contradict. A paper, once one exists, must
-  # have a record and match it.
   verify-record:
     name: Verify the record
     runs-on: ubuntu-latest
@@ -39,23 +24,70 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # Full history: the record's containment check walks every past
-          # revision of record.json, and the provenance check requires the
-          # declared run's commit to be an ancestor of HEAD. A shallow
-          # clone can answer neither.
           fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      # No LaTeX toolchain here on purpose: this job sits in front of every
-      # commit and has to stay fast enough for that.
       - name: Verify record against run outputs, history and Seyval
         env:
           SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
-        # The verdict is the exit code; the JSON report goes to stdout, so a
-        # red run is readable in the job log itself. Nothing downstream reads
-        # the report as a file, hence no artifact.
         run: |
           uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
             airas verify-record --local-path .
+
+      - name: Cross-check paper.pdf against the Publish Paper artifact
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+
+          if ! git rev-parse --verify -q HEAD~1 > /dev/null; then
+            changed=$(git show --name-only --format= HEAD)
+          else
+            changed=$(git diff --name-only HEAD~1 HEAD)
+          fi
+          pdf_re='^\.research/latex/[^/]+/paper\.pdf$'
+          pdfs=$(printf '%s\n' "$changed" | grep -E "$pdf_re" || true)
+          if [ -z "$pdfs" ]; then
+            echo "HEAD does not change paper.pdf; nothing to cross-check."
+            exit 0
+          fi
+
+          others=$(printf '%s\n' "$changed" | grep -v -E "$pdf_re" || true)
+          if [ -n "$others" ]; then
+            fail "a commit that changes paper.pdf may change nothing else; also touches: $(echo "$others" | tr '\n' ' ')"
+          fi
+          git rev-parse --verify -q HEAD~1 > /dev/null \
+            || fail "paper.pdf cannot arrive in a root commit: no Publish Paper run can have built it"
+          parent=$(git rev-parse HEAD~1)
+
+          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${parent}&per_page=100" \
+            --jq '[.workflow_runs[] | select(.path == ".github/workflows/publish_paper.yml" and (.conclusion == null or .conclusion == "success")) | .id] | .[]')
+          [ -n "$runs" ] || fail "no Publish Paper run built ${parent}; a paper.pdf commit must follow the run that produced it"
+
+          artifact=""
+          for run in $runs; do
+            artifact=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/artifacts" \
+              --jq ".artifacts[] | select(.name == \"verified-paper-${parent}\" and .expired == false) | .id" | head -1)
+            [ -n "$artifact" ] && break
+          done
+          [ -n "$artifact" ] || fail "no verified-paper-${parent} artifact on any Publish Paper run for ${parent}"
+
+          tmp=$(mktemp -d)
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact}/zip" > "$tmp/artifact.zip"
+          unzip -q "$tmp/artifact.zip" -d "$tmp/artifact"
+
+          for committed in $pdfs; do
+            template=$(basename "$(dirname "$committed")")
+            built="$tmp/artifact/${template}.pdf"
+            [ -f "$built" ] || fail "artifact verified-paper-${parent} holds no ${template}.pdf for ${committed}"
+            want=$(sha256sum "$built" | cut -d' ' -f1)
+            have=$(sha256sum "$committed" | cut -d' ' -f1)
+            if [ "$want" != "$have" ]; then
+              fail "${committed} (sha256 ${have}) is not the PDF Publish Paper built from ${parent} (sha256 ${want})"
+            fi
+            echo "${committed} is byte-identical to artifact verified-paper-${parent} (sha256 ${have})."
+          done

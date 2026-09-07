@@ -22,7 +22,6 @@ jobs:
     name: Build and publish the paper
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    if: "${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'paper: CI-built PDF') }}"
 
     steps:
       - name: Checkout repository
@@ -31,8 +30,23 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Decide whether this commit is our own PDF commit
+        id: guard
+        run: |
+          skip=false
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && git rev-parse --verify -q HEAD~1 > /dev/null; then
+            changed=$(git diff --name-only HEAD~1 HEAD)
+            if [ -n "$changed" ] \
+               && ! printf '%s\n' "$changed" | grep -q -v -E '^\.research/latex/[^/]+/paper\.pdf$'; then
+              skip=true
+              echo "HEAD changes only paper.pdf (the gate verified it against its artifact); nothing to build."
+            fi
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+
       - name: Look for a paper
         id: paper
+        if: steps.guard.outputs.skip != 'true'
         run: |
           if compgen -G ".research/latex/*/main.tex" > /dev/null; then
             echo "present=true" >> "$GITHUB_OUTPUT"
@@ -101,7 +115,12 @@ jobs:
             echo "$dest already holds this build."
             exit 0
           fi
+
           cp "$pdf" "$dest"
+          digest=$(sha256sum "$pdf" | cut -d' ' -f1)
+          echo "paper.pdf sha256 for ${GITHUB_SHA}: ${digest}"
+          printf '### paper.pdf\n\n- built from: `%s`\n- sha256: `%s`\n- artifact: `verified-paper-%s`\n' \
+            "${GITHUB_SHA}" "${digest}" "${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
