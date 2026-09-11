@@ -222,7 +222,9 @@ jobs:
           if [[ "$passed" == "true" ]]; then
             echo "Experiment passed for $RUN_ID (mode=$MODE)"
           else
+            # Fail the job so the run's conclusion says so; results still upload (if: always()).
             echo "Experiment failed for $RUN_ID (mode=$MODE)"
+            exit 1
           fi
 
       - name: Upload results
