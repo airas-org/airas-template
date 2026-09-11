@@ -144,6 +144,7 @@ jobs:
 
             docker run --rm $GPU_FLAGS \
               -v "$(pwd)/$RESULTS_DIR:/workspace/$RESULTS_DIR" \
+              -e RUN_ID -e MODE -e RESULTS_DIR \
               -e ANTHROPIC_API_KEY \
               -e AWS_BEARER_TOKEN_BEDROCK \
               -e GEMINI_API_KEY \
@@ -160,9 +161,11 @@ jobs:
               bash -c '
                 set -e
                 set -o pipefail
-                echo "=== [EXPERIMENT RUN] Start for '"$RUN_ID"' (mode='"$MODE"') at $(date -u) ==="
-                uv run python -u -m src.main run='"$RUN_ID"' results_dir="$RESULTS_DIR" mode='"$MODE"'
-                echo "=== [EXPERIMENT RUN] PASSED for '"$RUN_ID"' at $(date -u) ==="
+                echo "=== [EXPERIMENT RUN] Start for $RUN_ID (mode=$MODE) at $(date -u) ==="
+                uv run python -u -m src.main run=$RUN_ID results_dir="$RESULTS_DIR" mode=$MODE
+                make evaluate RUN_ID=$RUN_ID
+                uv run python -u -m src.evaluate results_dir="$RESULTS_DIR" run_ids="[\"$RUN_ID\"]"
+                echo "=== [EXPERIMENT RUN] PASSED for $RUN_ID at $(date -u) ==="
               ' > >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
 
       - name: Run experiment (native)
@@ -188,6 +191,8 @@ jobs:
                 run=$RUN_ID \
                 results_dir="$RESULTS_DIR" \
                 mode=$MODE
+              make evaluate RUN_ID=$RUN_ID
+              uv run python -u -m src.evaluate results_dir="$RESULTS_DIR" run_ids="[\"$RUN_ID\"]"
               echo "=== [EXPERIMENT RUN] PASSED for $RUN_ID at $(date -u) ==="
             ) > >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
 
@@ -227,6 +232,6 @@ jobs:
           action: actions/upload-artifact@v4
           with: |
             name: ${{ inputs.mode }}-${{ github.run_id }}-${{ inputs.run_id }}
-            path: ${{ env.RESULTS_DIR }}
+            path: ${{ env.RESULTS_DIR }}/${{ inputs.run_id }}
           attempt_limit: 3
           attempt_delay: 30000
