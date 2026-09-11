@@ -76,15 +76,15 @@ jobs:
         if: steps.paper.outputs.present == 'true'
         uses: astral-sh/setup-uv@v5
 
-      - name: Verify paper values and provenance, build PDF
+      # Build only: the required paper gate (verify_paper) already verified
+      # the values on this commit before it could land here.
+      - name: Build the paper PDF
         if: steps.paper.outputs.present == 'true'
-        env:
-          SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
         run: |
           uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
-            airas verify-paper --local-path . --output-dir paper-artifact
+            airas publish-paper --local-path . --output-dir paper-artifact
 
-      - name: Upload verification report and PDF
+      - name: Upload the built PDF
         if: always() && steps.paper.outputs.present == 'true'
         uses: actions/upload-artifact@v4
         with:
