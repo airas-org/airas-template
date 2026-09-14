@@ -43,3 +43,6 @@ Thumbs.db
 .env
 *.pem
 *.key
+
+# Lean build outputs (lean/.lake is rebuilt inside the image)
+lean/.lake/

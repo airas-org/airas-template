@@ -19,6 +19,28 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# Lean toolchain manager, for `lean` claims (see lean/ and `make run`). Pinned
+# to a version AND the sha256 of its release tarball. Only elan is installed
+# here: the toolchain named in lean/lean-toolchain is fetched on first use and
+# the mathlib build cache by `lake exe cache get` inside `make run`, so an
+# experiment-only run pays nothing beyond this small layer. ELAN_HOME is
+# world-writable because that first use may happen as a non-root user.
+ARG ELAN_VERSION=4.2.4
+ENV ELAN_HOME=/opt/elan \
+    PATH=/opt/elan/bin:$PATH
+RUN set -eux; \
+    case "$(uname -m)" in \
+      x86_64)  arch=x86_64;  sha=42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63 ;; \
+      aarch64) arch=aarch64; sha=05febd124d84ebf994b2e7479922a5650b1e950c17ae3bd1ddd776b65bb72bf9 ;; \
+      *) echo "unsupported architecture: $(uname -m)"; exit 1 ;; \
+    esac; \
+    curl -sSfL "https://github.com/leanprover/elan/releases/download/v${ELAN_VERSION}/elan-${arch}-unknown-linux-gnu.tar.gz" -o /tmp/elan.tar.gz; \
+    echo "${sha}  /tmp/elan.tar.gz" | sha256sum -c -; \
+    tar -xzf /tmp/elan.tar.gz -C /tmp elan-init; \
+    /tmp/elan-init -y --no-modify-path --default-toolchain none; \
+    rm -f /tmp/elan.tar.gz /tmp/elan-init; \
+    chmod -R a+rwX "$ELAN_HOME"
+
 # Install uv package manager.
 # Pinned to a version AND its digest: `:latest` moves, so an unpinned uv is a
 # floating input to every build. Bump both lines together.

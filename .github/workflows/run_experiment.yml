@@ -144,7 +144,7 @@ jobs:
 
             docker run --rm $GPU_FLAGS \
               -v "$(pwd)/$RESULTS_DIR:/workspace/$RESULTS_DIR" \
-              -e RUN_ID -e MODE -e RESULTS_DIR \
+              -e RUN_ID -e MODE -e RESULTS_DIR -e GITHUB_SHA \
               -e ANTHROPIC_API_KEY \
               -e AWS_BEARER_TOKEN_BEDROCK \
               -e GEMINI_API_KEY \
@@ -162,9 +162,7 @@ jobs:
                 set -e
                 set -o pipefail
                 echo "=== [EXPERIMENT RUN] Start for $RUN_ID (mode=$MODE) at $(date -u) ==="
-                uv run python -u -m src.main run=$RUN_ID results_dir="$RESULTS_DIR" mode=$MODE
-                make evaluate RUN_ID=$RUN_ID
-                uv run python -u -m src.evaluate results_dir="$RESULTS_DIR" run_ids="[\"$RUN_ID\"]"
+                make run RUN_ID="$RUN_ID" MODE="$MODE"
                 echo "=== [EXPERIMENT RUN] PASSED for $RUN_ID at $(date -u) ==="
               ' > >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
 
@@ -187,12 +185,7 @@ jobs:
               echo "=== [UV SYNC] Finished successfully at $(date -u) ==="
 
               echo "=== [EXPERIMENT RUN] Start for $RUN_ID (mode=$MODE) at $(date -u) ==="
-              uv run python -u -m src.main \
-                run=$RUN_ID \
-                results_dir="$RESULTS_DIR" \
-                mode=$MODE
-              make evaluate RUN_ID=$RUN_ID
-              uv run python -u -m src.evaluate results_dir="$RESULTS_DIR" run_ids="[\"$RUN_ID\"]"
+              make run RUN_ID="$RUN_ID" MODE="$MODE"
               echo "=== [EXPERIMENT RUN] PASSED for $RUN_ID at $(date -u) ==="
             ) > >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
 
