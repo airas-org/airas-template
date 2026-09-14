@@ -27,45 +27,61 @@
 RESULTS_DIR      ?= .research/results
 MODE             ?= full
 EVAL_PLAN        ?= .research/evaluation.json
-RUN_CONFIG        = config/run/$(RUN_ID).yaml
 LEAN_DIR         ?= lean
 AIRAS_EVAL_TASKS ?= $(shell python3 -c 'import json,sys; d=json.load(open("$(EVAL_PLAN)")); print(" ".join(d.get("task_types", [])))')
 AIRAS_EVAL        = uv run --group eval airas-eval
 
-# `key: value` from the run config, with quotes and a trailing comment stripped.
-run_config_value  = $(shell sed -n 's/^$(1):[[:space:]]*//p' "$(RUN_CONFIG)" 2>/dev/null \
-                      | sed -e 's/[[:space:]]*\#.*$$//' -e 's/^"\(.*\)"$$/\1/' -e "s/^'\(.*\)'$$/\1/" | head -1)
-RUN_KIND          = $(call run_config_value,kind)
-LEAN_MODULE       = $(call run_config_value,module)
-LEAN_DECL         = $(call run_config_value,decl)
-LEAN_RUN_DIR      = $(abspath $(RESULTS_DIR))/$(RUN_ID)
+# RUN_ID and MODE come from workflow inputs and the run config's values from a
+# file the agent writes, so recipes read them as shell variables ($$RUN_ID, and
+# `$(call run_config_value,key)` into a local) and check their characters
+# before using them: pasting them into recipe text would let a value such as
+# `$(...)` run as a command, or a RUN_ID such as `../x` write outside RESULTS_DIR.
+export RUN_ID MODE RESULTS_DIR LEAN_DIR
+
+# Shell text that prints `key: value` from config/run/$RUN_ID.yaml, with quotes
+# and a trailing comment stripped. $(1) is a literal key from this Makefile.
+run_config_value  = sed -n 's/^$(1):[[:space:]]*//p' "config/run/$$RUN_ID.yaml" 2>/dev/null \
+                      | sed -e 's/[[:space:]]*\#.*$$//' -e 's/^"\(.*\)"$$/\1/' -e "s/^'\(.*\)'$$/\1/" | head -1
 
 .PHONY: run run-experiment run-lean evaluate validate-inputs schema list-tasks
 
 ## Run one run_id at one stage: make run RUN_ID=<run_id> MODE=<sanity|pilot|full>
 run: _require_run_id
-	@case "$(RUN_KIND)" in \
-	  ""|experiment) $(MAKE) run-experiment RUN_ID="$(RUN_ID)" MODE="$(MODE)" ;; \
-	  lean)          $(MAKE) run-lean       RUN_ID="$(RUN_ID)" MODE="$(MODE)" ;; \
-	  *) echo "unknown kind '$(RUN_KIND)' in $(RUN_CONFIG): expected no kind (an experiment) or 'lean'"; exit 1 ;; \
+	@kind=$$($(call run_config_value,kind)); \
+	case "$$kind" in \
+	  ""|experiment) $(MAKE) run-experiment ;; \
+	  lean)          $(MAKE) run-lean ;; \
+	  *) echo "unknown kind '$$kind' in config/run/$$RUN_ID.yaml: expected no kind (an experiment) or 'lean'"; exit 1 ;; \
 	esac
 
 ## The experiment chain. A run that stops after src.main leaves no metrics.json
 ## for the record gate to compare, so the three steps are one target.
 run-experiment: _require_run_id
-	uv run python -u -m src.main run=$(RUN_ID) results_dir="$(RESULTS_DIR)" mode=$(MODE)
-	$(MAKE) evaluate RUN_ID="$(RUN_ID)"
-	uv run python -u -m src.evaluate results_dir="$(RESULTS_DIR)" run_ids="[\"$(RUN_ID)\"]"
+	uv run python -u -m src.main run=$$RUN_ID results_dir="$$RESULTS_DIR" mode=$$MODE
+	$(MAKE) evaluate
+	uv run python -u -m src.evaluate results_dir="$$RESULTS_DIR" run_ids="[\"$$RUN_ID\"]"
 
-## A proof. The build log is kept next to lean.json; airas-report reads it, so a
-## failed build is reported rather than hidden, and fails the run itself.
-run-lean: _require_run_id _require_lean_run
-	@mkdir -p "$(LEAN_RUN_DIR)"
-	cd "$(LEAN_DIR)" && lake exe cache get
-	cd "$(LEAN_DIR)" && lake build "$(LEAN_MODULE)" 2>&1 | tee "$(LEAN_RUN_DIR)/build.txt"; \
-	  lake exe airas-report --module "$(LEAN_MODULE)" --decl "$(LEAN_DECL)" --mode "$(MODE)" \
-	    --build-log "$(LEAN_RUN_DIR)/build.txt" --out "$(LEAN_RUN_DIR)/lean.json"
-	@case "$(MODE)" in sanity) echo "SANITY_VALIDATION: PASS" ;; esac
+## A proof. The build log is kept next to lean.json and airas-report reads it,
+## so a failed build is reported rather than hidden; the run fails if either
+## the build or the report did, whatever the other said.
+run-lean: _require_run_id
+	@module=$$($(call run_config_value,module)); decl=$$($(call run_config_value,decl)); \
+	test -n "$$module" && test -n "$$decl" \
+	  || { echo "config/run/$$RUN_ID.yaml must name 'module' and 'decl' for a lean run"; exit 1; }; \
+	case "$$module$$decl" in *[!A-Za-z0-9_.\']*) \
+	  echo "'module' and 'decl' in config/run/$$RUN_ID.yaml may hold only letters, digits, '_', '.' and \"'\""; exit 1 ;; esac; \
+	case "$$MODE" in sanity|full) ;; *) \
+	  echo "Lean runs have no '$$MODE' stage: use sanity (the statement type-checks, sorry allowed) or full (a sorry-free proof)"; exit 1 ;; esac; \
+	run_dir="$(abspath $(RESULTS_DIR))/$$RUN_ID"; mkdir -p "$$run_dir"; \
+	cd "$$LEAN_DIR" || exit 1; \
+	lake exe cache get || exit 1; \
+	build_status=0; lake build "$$module" > "$$run_dir/build.txt" 2>&1 || build_status=$$?; \
+	cat "$$run_dir/build.txt"; \
+	report_status=0; lake exe airas-report --module "$$module" --decl "$$decl" --mode "$$MODE" \
+	  --build-log "$$run_dir/build.txt" --out "$$run_dir/lean.json" || report_status=$$?; \
+	test "$$build_status" -eq 0 || { echo "lake build $$module failed (exit $$build_status)"; exit 1; }; \
+	exit "$$report_status"
+	@case "$$MODE" in sanity) echo "SANITY_VALIDATION: PASS" ;; esac
 
 ## Score every task type in the plan for one run: make evaluate RUN_ID=<run_id>
 evaluate: _require_run_id _require_tasks
@@ -92,11 +108,9 @@ list-tasks: _require_tasks
 	@for t in $(AIRAS_EVAL_TASKS); do $(AIRAS_EVAL) list $$t; done
 
 _require_run_id:
-	@test -n "$(RUN_ID)" || { echo "RUN_ID is required, e.g. make evaluate RUN_ID=proposed-resnet-cifar10"; exit 1; }
+	@test -n "$$RUN_ID" || { echo "RUN_ID is required, e.g. make evaluate RUN_ID=proposed-resnet-cifar10"; exit 1; }
+	@case "$$RUN_ID" in *[!A-Za-z0-9_.-]*|.*) \
+	  echo "RUN_ID '$$RUN_ID' may hold only letters, digits, '_', '.' and '-', and may not start with '.'"; exit 1 ;; esac
 
 _require_tasks:
 	@test -n "$(AIRAS_EVAL_TASKS)" || { echo "no task types: $(EVAL_PLAN) has no task_types and AIRAS_EVAL_TASKS is unset"; exit 1; }
-
-_require_lean_run:
-	@test -n "$(LEAN_MODULE)" && test -n "$(LEAN_DECL)" || { echo "$(RUN_CONFIG) must name 'module' and 'decl' for a lean run"; exit 1; }
-	@test "$(MODE)" = sanity || test "$(MODE)" = full || { echo "Lean runs have no '$(MODE)' stage: use sanity (the statement type-checks, sorry allowed) or full (a sorry-free proof)"; exit 1; }
