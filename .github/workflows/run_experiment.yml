@@ -112,7 +112,10 @@ jobs:
             exit_status=${PIPESTATUS[0]}
             if [ $exit_status -ne 0 ]; then
               echo "::error::Docker build failed (exit $exit_status); see docker_build.log in the results artifact"
-              cat "$RESULTS_DIR/docker_build.log" >> "$RESULTS_DIR/stderr.txt"
+              # The artifact holds only the run's directory, so put the log there.
+              mkdir -p "$RESULTS_DIR/$RUN_ID"
+              cp "$RESULTS_DIR/docker_build.log" "$RESULTS_DIR/$RUN_ID/docker_build.log"
+              cat "$RESULTS_DIR/docker_build.log" >> "$RESULTS_DIR/$RUN_ID/stderr.txt"
               exit $exit_status
             fi
 
