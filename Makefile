@@ -8,10 +8,14 @@
 #                then src.evaluate for metrics.json and the figures
 #   kind: lean   a proof: `lake build <module>` in lean/, then `lake exe
 #                airas-report` writes .research/results/<run_id>/lean.json for
-#                <decl>. The yaml also names them, e.g.
+#                <decl>, checking it against the statement the record declares
+#                for the run. The yaml names module and decl, and optionally
+#                the namespaces whose scoped notations the declared statement
+#                needs, e.g.
 #                    kind: lean
 #                    module: Airas.Thm1
 #                    decl: thm1
+#                    open: BigOperators,Finset
 #                MODE is sanity (the statement type-checks, sorry allowed) or
 #                full (a sorry-free proof); Lean has no pilot stage.
 #
@@ -66,10 +70,11 @@ run-experiment: _require_run_id
 ## the build or the report did, whatever the other said.
 run-lean: _require_run_id
 	@module=$$($(call run_config_value,module)); decl=$$($(call run_config_value,decl)); \
+	opens=$$($(call run_config_value,open)); \
 	test -n "$$module" && test -n "$$decl" \
 	  || { echo "config/run/$$RUN_ID.yaml must name 'module' and 'decl' for a lean run"; exit 1; }; \
-	case "$$module$$decl" in *[!A-Za-z0-9_.\']*) \
-	  echo "'module' and 'decl' in config/run/$$RUN_ID.yaml may hold only letters, digits, '_', '.' and \"'\""; exit 1 ;; esac; \
+	case "$$module$$decl$$opens" in *[!A-Za-z0-9_.,\']*) \
+	  echo "'module', 'decl' and 'open' in config/run/$$RUN_ID.yaml may hold only letters, digits, '_', '.', ',' and \"'\""; exit 1 ;; esac; \
 	case "$$MODE" in sanity|full) ;; *) \
 	  echo "Lean runs have no '$$MODE' stage: use sanity (the statement type-checks, sorry allowed) or full (a sorry-free proof)"; exit 1 ;; esac; \
 	run_dir="$(abspath $(RESULTS_DIR))/$$RUN_ID"; mkdir -p "$$run_dir"; \
@@ -78,6 +83,7 @@ run-lean: _require_run_id
 	build_status=0; lake build "$$module" > "$$run_dir/build.txt" 2>&1 || build_status=$$?; \
 	cat "$$run_dir/build.txt"; \
 	report_status=0; lake exe airas-report --module "$$module" --decl "$$decl" --mode "$$MODE" \
+	  --record "$(abspath .research/record.json)" --run-id "$$RUN_ID" --open "$$opens" \
 	  --build-log "$$run_dir/build.txt" --out "$$run_dir/lean.json" || report_status=$$?; \
 	test "$$build_status" -eq 0 || { echo "lake build $$module failed (exit $$build_status)"; exit 1; }; \
 	exit "$$report_status"
