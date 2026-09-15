@@ -46,7 +46,8 @@ jobs:
           else
             python3 - <<'PY'
           import json, os, sys
-          history = json.load(open(".research/research_history.json"))
+          path = ".research/research_history.json"
+          history = json.load(open(path)) if os.path.isfile(path) else {}
           html = history.get("full_html")
           if not html:
               print("No .research/html/index.html and no full_html in research_history.json — nothing to publish.")
