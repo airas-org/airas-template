@@ -70,7 +70,20 @@ jobs:
               texlive-latex-extra \
               texlive-science \
               texlive-luatex \
-              texlive-lang-japanese
+              texlive-lang-japanese \
+              texlive-font-utils \
+              ghostscript
+
+      # pdflatex runs without shell escape, so epstopdf cannot convert the EPS
+      # files a class includes (mdpi's logo) during the build; convert them
+      # here under the name epstopdf-pkg looks for.
+      - name: Convert EPS files the templates include
+        if: steps.paper.outputs.present == 'true'
+        run: |
+          shopt -s nullglob
+          for eps in .research/latex/*/Definitions/*.eps .research/latex/*/*.eps; do
+            epstopdf "$eps" --outfile="${eps%.eps}-eps-converted-to.pdf"
+          done
 
       - name: Install uv
         if: steps.paper.outputs.present == 'true'

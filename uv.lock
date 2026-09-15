@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -8,7 +8,7 @@ resolution-markers = [
 
 [[package]]
 name = "airas-eval"
-version = "0.9.0"
+version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -18,9 +18,9 @@ dependencies = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2e/a5/218483526dc1fbec5122e06de5387ca4897980a21fda39a9c8d7b3ad9f96/airas_eval-0.9.0.tar.gz", hash = "sha256:43c2ded00a0aafd0021176884006295e62bbb83fb000f56c9c224d69370803d5", size = 122313, upload-time = "2026-08-27T11:55:27.012Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/14/fe/ff3df88e248909d4b3346bd60fc9fb45de75587d8459d36b605146c7658d/airas_eval-0.10.0.tar.gz", hash = "sha256:ed24e4cd5dfd540e9b443ae8dfd576749f430f76eb079ca2f600de2f0cd7eacf", size = 124255, upload-time = "2026-08-28T06:10:48.419Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6a/f4/98fa43796e067eb88125fff92af3968e9b8622112c3dfe7fa357f3ee4ed9/airas_eval-0.9.0-py3-none-any.whl", hash = "sha256:85bda0c7bf9b5c27f23f62194b37fbc6b4fd710b1081205268daaecc6e9cc1f2", size = 63633, upload-time = "2026-08-27T11:55:25.831Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/97/2c4da5c6952a78f31e320bf4521d6b96eaea8523c3a19c78dd4b14d7ccdb/airas_eval-0.10.0-py3-none-any.whl", hash = "sha256:ee23e2113d463133dd5b60e7d1cc10f44ccd533dd0ab57abb4d1affb8f9903eb", size = 64923, upload-time = "2026-08-28T06:10:47.423Z" },
 ]
 
 [[package]]
@@ -224,7 +224,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-eval = [{ name = "airas-eval", specifier = "==0.9.0" }]
+eval = [{ name = "airas-eval", specifier = "==0.10.0" }]
 
 [[package]]
 name = "hydra-core"
@@ -725,7 +725,7 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7a/97/5a3609c4f8d58b039179648e62dd220f89864f56f7357f5d4f45c29eb2cc/scipy-1.17.1.tar.gz", hash = "sha256:95d8e012d8cb8816c226aef832200b1d45109ed4464303e997c5b13122b297c0", size = 30573822, upload-time = "2026-02-23T00:26:24.851Z" }
 wheels = [
@@ -799,7 +799,7 @@ resolution-markers = [
     "python_full_version >= '3.12'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7e/74/66de6258867beb2ef08f35f9f2ac017a52cacd5081714d239ff1a442d458/scipy-1.18.1.tar.gz", hash = "sha256:52c4b7422442aba924d03ad4019852b08a92e64ea187b933135687bfe2747307", size = 30781235, upload-time = "2026-08-21T23:28:50.599Z" }
 wheels = [
