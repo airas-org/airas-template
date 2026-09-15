@@ -2,7 +2,8 @@ import Lean
 
 /-!
 `lake exe airas-report --module <M> --decl <d> --mode <sanity|full>
-  [--record <record.json> --run-id <id>] [--build-log <path>] [--out <path>]`
+  [--record <record.json> --run-id <id>] [--open <ns,ns>]
+  [--build-log <path>] [--out <path>]`
 
 Writes the `lean.json` report of one declaration after `lake build <M>`:
 
@@ -12,7 +13,10 @@ Writes the `lean.json` report of one declaration after `lake build <M>`:
   built declaration's type, compared as terms up to bound-variable names —
   so the record may spell the type any way Lean accepts, and a proof of a
   definitionally equal but different statement (`n = n` for `n + 0 = n`)
-  still does not match. `null` when no record entry names this run.
+  still does not match. `null` when the record has no entry for this run;
+  a record that cannot be read is an error, not a missing entry. `--open`
+  names the namespaces whose scoped notations and short names the declared
+  statement relies on (mathlib's `∑` and `ℕ` need none).
 - `axioms`: every axiom the declaration depends on, `sorryAx` included
 - `errors` / `warnings`: the build log's error and warning lines; an import
   or lookup failure is an error too, so a failed build is still a report
@@ -40,6 +44,7 @@ structure Args where
   out : String := "lean.json"
   record : Option String := none
   runId : Option String := none
+  opens : String := ""
   toolchainFile : String := "lean-toolchain"
   manifestFile : String := "lake-manifest.json"
 
@@ -52,6 +57,7 @@ partial def parseArgs : List String → Args → Except String Args
   | "--out" :: v :: rest, a => parseArgs rest { a with out := v }
   | "--record" :: v :: rest, a => parseArgs rest { a with record := some v }
   | "--run-id" :: v :: rest, a => parseArgs rest { a with runId := some v }
+  | "--open" :: v :: rest, a => parseArgs rest { a with opens := v }
   | "--toolchain-file" :: v :: rest, a => parseArgs rest { a with toolchainFile := v }
   | "--manifest-file" :: v :: rest, a => parseArgs rest { a with manifestFile := v }
   | arg :: _, _ => .error s!"unknown argument '{arg}'"
@@ -97,10 +103,17 @@ def commitSha : IO (Option String) := do
   return none
 
 /-- `params.statement` of the run `runId` in the record: the last entry with
-that run id, since a claim appended again under the same id is the live one. -/
-def declaredStatement (record : System.FilePath) (runId : String) : IO (Option String) := do
-  let text ← readFileOrEmpty record
-  let some json := (Json.parse text).toOption | return none
+that run id, since a claim appended again under the same id is the live one.
+`none` only when the record has no entry for the run; a record that is
+missing or not JSON is an error, so the comparison cannot be switched off by
+pointing at a broken file. -/
+def declaredStatement (record : System.FilePath) (runId : String) :
+    IO (Except String (Option String)) := do
+  unless ← record.pathExists do
+    return .error s!"the record {record} does not exist"
+  let json ← match Json.parse (← IO.FS.readFile record) with
+    | .ok json => pure json
+    | .error e => return .error s!"the record {record} is not JSON: {e}"
   let arr (j : Json) (key : String) : Array Json :=
     (j.getObjVal? key >>= Json.getArr?).toOption.getD #[]
   let mut found : Option String := none
@@ -111,25 +124,31 @@ def declaredStatement (record : System.FilePath) (runId : String) : IO (Option S
           if (r.getObjValAs? String "run_id").toOption == some runId then
             if let some p := (r.getObjVal? "params").toOption then
               found := (p.getObjValAs? String "statement").toOption <|> found
-  return found
+  return .ok found
 
 /-- The declared statement as a term of the module's environment, compared
 with the built type up to bound-variable names (`Expr.eqv`). Definitional
 unfolding is deliberately not used: a proof of a different statement that
 happens to compute to the declared one is not the declared theorem. -/
-def statementMatches (env : Environment) (declared : String) (built : Expr) :
-    IO (Except String Bool) := do
-  let stx ← match Parser.runParserCategory env `term declared with
-    | .ok stx => pure stx
-    | .error e => return .error s!"the declared statement does not parse: {e}"
-  let elaborate : Elab.TermElabM Expr := Elab.Term.withoutErrToSorry do
-    let e ← Elab.Term.elabType stx
-    Elab.Term.synthesizeSyntheticMVarsNoPostponing
-    instantiateMVars e
+def statementMatches (env : Environment) (opens : List Name) (declared : String)
+    (built : Expr) : IO (Except String Bool) := do
+  let elaborate : MetaM Bool := do
+    -- `open scoped ns` for the notations, `open ns` for the short names.
+    for ns in opens do activateScoped ns
+    let stx ← match Parser.runParserCategory (← getEnv) `term declared with
+      | .ok stx => pure stx
+      | .error e => throwError "does not parse: {e}"
+    let e ← withTheReader Core.Context
+        (fun c => { c with openDecls := opens.map (OpenDecl.simple · []) }) do
+      (Elab.Term.withoutErrToSorry do
+        let e ← Elab.Term.elabType stx
+        Elab.Term.synthesizeSyntheticMVarsNoPostponing
+        instantiateMVars e).run'
+    return e.eqv built
   try
-    let (e, _, _) ← (elaborate.run' : MetaM Expr).toIO
+    let (same, _, _) ← elaborate.toIO
       { fileName := "<declared statement>", fileMap := FileMap.ofString declared } { env }
-    return .ok (e.eqv built)
+    return .ok same
   catch ex =>
     return .error s!"the declared statement does not elaborate: {ex}"
 
@@ -139,7 +158,8 @@ structure Inspection where
   axioms : Array String := #[]
   errors : List String := []
 
-def inspect (moduleName declName : String) (declared : Option String) : IO Inspection := do
+def inspect (moduleName declName : String) (opens : List Name) (declared : Option String) :
+    IO Inspection := do
   try
     initSearchPath (← findSysroot)
     let env ← importModules #[{ module := moduleName.toName }] {} 0 (loadExts := true)
@@ -156,7 +176,7 @@ def inspect (moduleName declName : String) (declared : Option String) : IO Inspe
       match declared with
       | none => return { statement, axioms }
       | some text =>
-        match ← statementMatches env text info.type with
+        match ← statementMatches env opens text info.type with
         | .ok same => return { statement, statementMatches := some same, axioms }
         | .error e => return { statement, axioms, errors := [e] }
   catch e =>
@@ -180,11 +200,15 @@ def main (argv : List String) : IO UInt32 := do
   -- Import even after a failed build: the module may have built before the
   -- failing change, and an unrelated module's failure must not hide this one.
   enableInitializers
-  let declared ← match args.record, args.runId with
-    | some record, some runId => declaredStatement record runId
-    | _, _ => pure none
-  let inspection ← inspect args.module args.decl declared
-  let errors := buildErrors ++ inspection.errors
+  let opens := (args.opens.splitOn ",").map trimmed |>.filter (· ≠ "") |>.map String.toName
+  let (declared, recordErrors) ← match args.record, args.runId with
+    | some record, some runId =>
+      match ← declaredStatement record runId with
+      | .ok declared => pure (declared, [])
+      | .error e => pure (none, [e])
+    | _, _ => pure (none, [])
+  let inspection ← inspect args.module args.decl opens declared
+  let errors := buildErrors ++ recordErrors ++ inspection.errors
 
   let report := Json.mkObj [
     ("commit", match ← commitSha with | some sha => Json.str sha | none => Json.null),
