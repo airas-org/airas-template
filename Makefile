@@ -8,7 +8,8 @@
 #                then src.evaluate for metrics.json and the figures
 #   kind: lean   a proof: `lake build <module>` in lean/, then `lake exe
 #                airas-report` writes .research/results/<run_id>/lean.json for
-#                <decl>. The yaml also names them, e.g.
+#                <decl>, checking it against the statement the record declares
+#                for the run. The yaml names module and decl, e.g.
 #                    kind: lean
 #                    module: Airas.Thm1
 #                    decl: thm1
@@ -78,6 +79,7 @@ run-lean: _require_run_id
 	build_status=0; lake build "$$module" > "$$run_dir/build.txt" 2>&1 || build_status=$$?; \
 	cat "$$run_dir/build.txt"; \
 	report_status=0; lake exe airas-report --module "$$module" --decl "$$decl" --mode "$$MODE" \
+	  --record "$(abspath .research/record.json)" --run-id "$$RUN_ID" \
 	  --build-log "$$run_dir/build.txt" --out "$$run_dir/lean.json" || report_status=$$?; \
 	test "$$build_status" -eq 0 || { echo "lake build $$module failed (exit $$build_status)"; exit 1; }; \
 	exit "$$report_status"
