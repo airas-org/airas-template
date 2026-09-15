@@ -90,10 +90,13 @@ jobs:
       - name: Prepare results dir
         run: mkdir -p "$RESULTS_DIR"
 
+      # A repository that ships a Dockerfile runs in it, or not at all: the
+      # native path is for runners without Docker, not for an image that does
+      # not build (a Lean run has no toolchain there, and an experiment would
+      # run in an environment the commit never described).
       - name: Build Docker image
         if: steps.check-docker.outputs.has_docker == 'true' && steps.check-docker.outputs.has_dockerfile == 'true'
         id: build-docker
-        continue-on-error: true
         uses: Wandalen/wretry.action@v3
         with:
           attempt_limit: 3
@@ -108,13 +111,13 @@ jobs:
 
             exit_status=${PIPESTATUS[0]}
             if [ $exit_status -ne 0 ]; then
-              echo "::warning::Docker build failed (exit $exit_status), will fall back to native execution"
+              echo "::error::Docker build failed (exit $exit_status); see docker_build.log in the results artifact"
               cat "$RESULTS_DIR/docker_build.log" >> "$RESULTS_DIR/stderr.txt"
               exit $exit_status
             fi
 
       - name: Install uv (fallback if no Docker)
-        if: steps.check-docker.outputs.has_docker == 'false' || steps.check-docker.outputs.has_dockerfile == 'false' || steps.build-docker.outcome != 'success'
+        if: steps.check-docker.outputs.has_docker == 'false' || steps.check-docker.outputs.has_dockerfile == 'false'
         uses: Wandalen/wretry.action@v3
         with:
           action: astral-sh/setup-uv@v6
@@ -167,7 +170,7 @@ jobs:
               ' > >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
 
       - name: Run experiment (native)
-        if: steps.check-docker.outputs.has_docker == 'false' || steps.check-docker.outputs.has_dockerfile == 'false' || steps.build-docker.outcome != 'success'
+        if: steps.check-docker.outputs.has_docker == 'false' || steps.check-docker.outputs.has_dockerfile == 'false'
         id: run-exp-native
         continue-on-error: true
         uses: Wandalen/wretry.action@v3
