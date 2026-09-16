@@ -1,0 +1,78 @@
+name: "Judge Citations"
+run-name: "📖 Judge every citation against its passage"
+
+# The paper gate (Verify Paper) fails on a citation no judgment covers, and
+# the judgments are written by a model, so CI writes them rather than
+# trusting the agent to: every push to a working branch reads the citations
+# that are not yet judged as the text now stands and commits the judgments
+# back onto the branch. Nothing pending means nothing committed, so the
+# commit this makes does not start another round.
+#
+# The protected branch is left alone: its pushes are refused, and a merge
+# into it already carries the judgments the gate required on the branch.
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  judge-citations:
+    name: Judge the citations
+    if: github.ref != format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Judge the citations not yet judged, and commit the judgments
+        env:
+          # The model is a repository variable so a repository can choose it;
+          # the keys are the ones set_github_actions_secrets provisions.
+          CITATION_JUDGE_MODEL: ${{ vars.CITATION_JUDGE_MODEL || 'claude-haiku-4-5-20251001' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          VERCEL_AI_GATEWAY_API_KEY: ${{ secrets.VERCEL_AI_GATEWAY_API_KEY }}
+          RIKYU_API_KEY: ${{ secrets.RIKYU_API_KEY }}
+          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ ! -f .research/record.json ]; then
+            echo "No .research/record.json — nothing to judge."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          before=$(git rev-parse HEAD)
+
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
+            airas judge-citations --local-path . --model "$CITATION_JUDGE_MODEL"
+
+          if [ "$(git rev-parse HEAD)" = "$before" ]; then
+            echo "Every citation is judged as the text stands; nothing to commit."
+            exit 0
+          fi
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "GH_PERSONAL_ACCESS_TOKEN is not set as a repository secret; the judgments" \
+                 "cannot be pushed (set_github_actions_secrets fixes this)." >&2
+            exit 1
+          fi
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -q "$remote" "HEAD:refs/heads/${GITHUB_REF_NAME}"
+          echo "Judgments committed as $(git rev-parse HEAD) on ${GITHUB_REF_NAME}."
