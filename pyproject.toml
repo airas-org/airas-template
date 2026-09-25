@@ -24,6 +24,6 @@ eval = ["airas-eval"]
 
 # airas-eval は git のタグで配布される(PyPI に無い git 固定の依存をベンチマークパックの
 # extra が持つため)。パックを使う研究は eval を `airas-eval[<pack>]` と書き、そのパックが
-# 要求する uv の設定(プラットフォーム別の差し替えなど)はパックの README に従って研究側に置く
+# 要求する設定(プラットフォーム別の差し替えなど)は `airas-eval list <task>` の説明に従って研究側に置く
 [tool.uv.sources]
-airas-eval = { git = "https://github.com/airas-org/airas-eval", tag = "v0.12.2" }
+airas-eval = { git = "https://github.com/airas-org/airas-eval", tag = "v0.12.5" }

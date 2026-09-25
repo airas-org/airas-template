@@ -8,8 +8,8 @@ resolution-markers = [
 
 [[package]]
 name = "airas-eval"
-version = "0.12.2"
-source = { git = "https://github.com/airas-org/airas-eval?tag=v0.12.2#08bff6d9aebe6197939faf16a9496f93aacba0bc" }
+version = "0.12.5"
+source = { git = "https://github.com/airas-org/airas-eval?tag=v0.12.5#887f7cbf4d72ee2e4f3a9986bf834563008c7501" }
 dependencies = [
     { name = "numpy" },
     { name = "pydantic" },
@@ -219,7 +219,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-eval = [{ name = "airas-eval", git = "https://github.com/airas-org/airas-eval?tag=v0.12.2" }]
+eval = [{ name = "airas-eval", git = "https://github.com/airas-org/airas-eval?tag=v0.12.5" }]
 
 [[package]]
 name = "hydra-core"
