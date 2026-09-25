@@ -6,12 +6,6 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 
-[manifest]
-overrides = [
-    { name = "antimony", specifier = "==2.14.0" },
-    { name = "libroadrunner", specifier = "==2.7.0" },
-]
-
 [[package]]
 name = "airas-eval"
 version = "0.12.2"
