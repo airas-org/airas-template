@@ -8,7 +8,7 @@ resolution-markers = [
 
 [[package]]
 name = "airas-eval"
-version = "0.10.0"
+version = "0.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -18,9 +18,9 @@ dependencies = [
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/14/fe/ff3df88e248909d4b3346bd60fc9fb45de75587d8459d36b605146c7658d/airas_eval-0.10.0.tar.gz", hash = "sha256:ed24e4cd5dfd540e9b443ae8dfd576749f430f76eb079ca2f600de2f0cd7eacf", size = 124255, upload-time = "2026-08-28T06:10:48.419Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/80/e0/0935b2f88eb21b40f86c0d616d392aa634937798e077842423b6b73b74da/airas_eval-0.11.0.tar.gz", hash = "sha256:e211dfb29e9b4ffa5e65a7fd1619434f0a0f5b68c1858c8cf62afbc157b3985f", size = 152742, upload-time = "2026-09-25T16:13:44.139Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d5/97/2c4da5c6952a78f31e320bf4521d6b96eaea8523c3a19c78dd4b14d7ccdb/airas_eval-0.10.0-py3-none-any.whl", hash = "sha256:ee23e2113d463133dd5b60e7d1cc10f44ccd533dd0ab57abb4d1affb8f9903eb", size = 64923, upload-time = "2026-08-28T06:10:47.423Z" },
+    { url = "https://files.pythonhosted.org/packages/56/9b/320d1eeb2f2d94887bb29f2981fc7c1da144eb38a31ac33d841049508ece/airas_eval-0.11.0-py3-none-any.whl", hash = "sha256:171dc7be48c2af8c359bfc659d774ea0f195b23769f6c7b664cff8e876badc4b", size = 90781, upload-time = "2026-09-25T16:13:42.965Z" },
 ]
 
 [[package]]
@@ -224,7 +224,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-eval = [{ name = "airas-eval", specifier = "==0.10.0" }]
+eval = [{ name = "airas-eval", specifier = "==0.11.0" }]
 
 [[package]]
 name = "hydra-core"
