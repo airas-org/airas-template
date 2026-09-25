@@ -14,8 +14,8 @@ overrides = [
 
 [[package]]
 name = "airas-eval"
-version = "0.12.0"
-source = { git = "https://github.com/airas-org/airas-eval?tag=v0.12.0#c085b6704cb60d236aa3cada8d208f4fa1d14ca1" }
+version = "0.12.1"
+source = { git = "https://github.com/airas-org/airas-eval?tag=v0.12.1#494c3c84ae004bf765ca6dde3833016179dec03d" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
@@ -226,7 +226,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-eval = [{ name = "airas-eval", git = "https://github.com/airas-org/airas-eval?tag=v0.12.0" }]
+eval = [{ name = "airas-eval", git = "https://github.com/airas-org/airas-eval?tag=v0.12.1" }]
 
 [[package]]
 name = "hydra-core"
