@@ -29,4 +29,4 @@ eval = ["airas-eval"]
 # airas-eval は git のタグで配布される(PyPI に無い git 固定の依存をベンチマークパックの
 # extra が持つため)。ベンチマークパックを使う研究は eval を `airas-eval[scigym]` のように書く
 [tool.uv.sources]
-airas-eval = { git = "https://github.com/airas-org/airas-eval", tag = "v0.12.1" }
+airas-eval = { git = "https://github.com/airas-org/airas-eval", tag = "v0.12.2" }
