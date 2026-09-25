@@ -15,9 +15,18 @@ dependencies = [
 # never installed as a distribution, so this project is not a package.
 [tool.uv]
 package = false
+# ベンチマークパック(scigym)の aarch64 向け差し替え。該当パッケージが無い研究には効かない
+prerelease = "allow"
+override-dependencies = ["antimony==2.14.0", "libroadrunner==2.7.0"]
+exclude-dependencies = ["rrplugins", "phrasedml", "python-libnuml", "python-libcombine"]
 
 # Evaluation layer (managed by AIRAS). Pinned so the reported metrics are
 # reproducible; experiment code must NOT import airas_eval — it is invoked only
 # through `make evaluate` / the airas-eval CLI on the eval_inputs files.
 [dependency-groups]
 eval = ["airas-eval==0.11.0"]
+
+# airas-eval は git のタグで配布される(PyPI に無い git 固定の依存をベンチマークパックの
+# extra が持つため)。ベンチマークパックを使う研究は eval を `airas-eval[scigym]` のように書く
+[tool.uv.sources]
+airas-eval = { git = "https://github.com/airas-org/airas-eval", tag = "v0.12.0" }
