@@ -57,31 +57,35 @@ jobs:
             exit 0
           fi
 
-          others=$(printf '%s\n' "$changed" | grep -v -E "$pdf_re" || true)
-          if [ -n "$others" ]; then
-            fail "a commit that changes paper.pdf may change nothing else; also touches: $(echo "$others" | tr '\n' ' ')"
-          fi
-          git rev-parse --verify -q HEAD~1 > /dev/null \
-            || fail "paper.pdf cannot arrive in a root commit: no Publish Paper run can have built it"
-          parent=$(git rev-parse HEAD~1)
-
-          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${parent}&per_page=100" \
-            --jq '[.workflow_runs[] | select(.path == ".github/workflows/publish_paper.yml" and (.conclusion == null or .conclusion == "success")) | .id] | .[]')
-          [ -n "$runs" ] || fail "no Publish Paper run built ${parent}; a paper.pdf commit must follow the run that produced it"
-
-          artifact=""
-          for run in $runs; do
-            artifact=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/artifacts" \
-              --jq ".artifacts[] | select(.name == \"verified-paper-${parent}\" and .expired == false) | .id" | head -1)
-            [ -n "$artifact" ] && break
-          done
-          [ -n "$artifact" ] || fail "no verified-paper-${parent} artifact on any Publish Paper run for ${parent}"
-
-          tmp=$(mktemp -d)
-          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact}/zip" > "$tmp/artifact.zip"
-          unzip -q "$tmp/artifact.zip" -d "$tmp/artifact"
-
           for committed in $pdfs; do
+            # The commit that wrote this PDF: HEAD for a Publish Paper commit, an
+            # ancestor when HEAD only inherits it (a merge that brings main into a
+            # working branch). Either way, that commit is what has to check out.
+            origin=$(git log -1 --format=%H -- "$committed")
+            git rev-parse --verify -q "${origin}~1" > /dev/null \
+              || fail "paper.pdf cannot arrive in a root commit: no Publish Paper run can have built it"
+            others=$(git diff --name-only "${origin}~1" "$origin" | grep -v -E "$pdf_re" || true)
+            if [ -n "$others" ]; then
+              fail "a commit that changes paper.pdf may change nothing else; ${origin} also touches: $(echo "$others" | tr '\n' ' ')"
+            fi
+            parent=$(git rev-parse "${origin}~1")
+
+            runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${parent}&per_page=100" \
+              --jq '[.workflow_runs[] | select(.path == ".github/workflows/publish_paper.yml" and (.conclusion == null or .conclusion == "success")) | .id] | .[]')
+            [ -n "$runs" ] || fail "no Publish Paper run built ${parent}; a paper.pdf commit must follow the run that produced it"
+
+            artifact=""
+            for run in $runs; do
+              artifact=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/artifacts" \
+                --jq ".artifacts[] | select(.name == \"verified-paper-${parent}\" and .expired == false) | .id" | head -1)
+              [ -n "$artifact" ] && break
+            done
+            [ -n "$artifact" ] || fail "no verified-paper-${parent} artifact on any Publish Paper run for ${parent}"
+
+            tmp=$(mktemp -d)
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact}/zip" > "$tmp/artifact.zip"
+            unzip -q "$tmp/artifact.zip" -d "$tmp/artifact"
+
             template=$(basename "$(dirname "$committed")")
             built="$tmp/artifact/${template}.pdf"
             [ -f "$built" ] || fail "artifact verified-paper-${parent} holds no ${template}.pdf for ${committed}"
@@ -90,5 +94,5 @@ jobs:
             if [ "$want" != "$have" ]; then
               fail "${committed} (sha256 ${have}) is not the PDF Publish Paper built from ${parent} (sha256 ${want})"
             fi
-            echo "${committed} is byte-identical to artifact verified-paper-${parent} (sha256 ${have})."
+            echo "${committed} is byte-identical to artifact verified-paper-${parent} (sha256 ${have}), written by ${origin}."
           done
