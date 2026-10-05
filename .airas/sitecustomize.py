@@ -273,15 +273,6 @@ def _origin(fn) -> dict:
     return {"module": fn.__module__, "file": fn.__code__.co_filename}
 
 
-def _reexport(module: str | None, name: str) -> bool:
-    """package 内の別モジュールで定義されたものを import しているだけ（定義元で記録する）"""
-    return (
-        module != name
-        and (module or "").split(".")[0] in _PACKAGES
-        and module != "__main__"
-    )
-
-
 def _ours(module: str | None, file: str | None) -> bool:
     """監視 package で定義されたもの、または実験コード（差し替え）で定義されたものか。
     import してきた stdlib や他 package の名前は記録しない。exec で作った関数は
@@ -308,7 +299,9 @@ def _finish():
             if attr.startswith("__"):
                 continue
             try:
-                if _reexport(getattr(obj, "__module__", None), name):
+                owner = getattr(obj, "__module__", None)
+                # package 内の別モジュールで定義されたものの再 export は、定義元で記録する
+                if owner != name and (owner or "").split(".")[0] in _PACKAGES:
                     continue
                 if isinstance(obj, types.FunctionType):
                     if _ours(obj.__module__, obj.__code__.co_filename):
