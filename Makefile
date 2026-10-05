@@ -60,8 +60,26 @@ run: _require_run_id
 
 ## The experiment chain. A run that stops after src.main leaves no metrics.json
 ## for the record gate to compare, so the three steps are one target.
+##
+## src.main runs with .airas/sitecustomize.py on PYTHONPATH, so every Python
+## process it starts records what it called, loaded and reached (see that file).
+## The per-process records are merged into results/<run_id>/observed.json after
+## the agent's process has exited; the gate compares them with the record's
+## declarations. `observe_packages` / `observe_components` in the run yaml
+## (comma-separated) name the upstream packages and `module.Class.method`
+## entry points to watch.
 run-experiment: _require_run_id
-	uv run python -u -m src.main run=$$RUN_ID results_dir="$$RESULTS_DIR" mode=$$MODE
+	@obs=$$(mktemp -d); status=0; \
+	PYTHONPATH="$(abspath .airas)$${PYTHONPATH:+:$$PYTHONPATH}" \
+	AIRAS_OBSERVE_DIR="$$obs" \
+	AIRAS_OBSERVE_PACKAGES="$$($(call run_config_value,observe_packages))" \
+	AIRAS_OBSERVE_COMPONENTS="$$($(call run_config_value,observe_components))" \
+	uv run python -u -m src.main run=$$RUN_ID results_dir="$$RESULTS_DIR" mode=$$MODE || status=$$?; \
+	mkdir -p "$$RESULTS_DIR/$$RUN_ID"; \
+	python3 -c 'import glob, json, sys; d, run_id, out = sys.argv[1:]; json.dump({"version": 1, "run_id": run_id, "processes": [json.load(open(f)) for f in sorted(glob.glob(d + "/*.json"))]}, open(out, "w"), ensure_ascii=False)' \
+	  "$$obs" "$$RUN_ID" "$$RESULTS_DIR/$$RUN_ID/observed.json" \
+	  || { echo "observed.json could not be merged; the raw records are kept in $$obs" >&2; test $$status -ne 0 || status=1; exit $$status; }; \
+	rm -rf "$$obs"; exit $$status
 	$(MAKE) evaluate
 	uv run python -u -m src.evaluate results_dir="$$RESULTS_DIR" run_ids="[\"$$RUN_ID\"]"
 

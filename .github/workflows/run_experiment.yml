@@ -21,6 +21,10 @@ on:
         description: 'Runner label (e.g., ["ubuntu-latest"], ["self-hosted", "gpu-runner"])'
         required: true
         default: '["ubuntu-latest"]'
+      secret_names:
+        description: 'Comma-separated names of the secrets registered for this repository (names only); the observation hook redacts their values from observed.json'
+        required: false
+        default: ''
 
 permissions:
   id-token: write
@@ -46,6 +50,7 @@ jobs:
     env:
       RUN_ID: ${{ inputs.run_id }}
       MODE: ${{ inputs.mode }}
+      AIRAS_SECRET_NAMES: ${{ inputs.secret_names }}
       # LLM inference experiments may use these provider keys.
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
@@ -150,7 +155,7 @@ jobs:
 
             docker run --rm $GPU_FLAGS \
               -v "$(pwd)/$RESULTS_DIR:/workspace/$RESULTS_DIR" \
-              -e RUN_ID -e MODE -e RESULTS_DIR -e GITHUB_SHA \
+              -e RUN_ID -e MODE -e RESULTS_DIR -e GITHUB_SHA -e AIRAS_SECRET_NAMES \
               -e ANTHROPIC_API_KEY \
               -e AWS_BEARER_TOKEN_BEDROCK \
               -e GEMINI_API_KEY \
