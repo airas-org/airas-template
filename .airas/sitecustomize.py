@@ -358,12 +358,21 @@ def _finish():
         json.dump(out, f, ensure_ascii=False, default=str, indent=1)
 
 
-if __name__ == "__main__":
-    # 結合: python3 sitecustomize.py <dir> <run_id> <out>。全プロセスで同じ節
-    # （hook / modules / symbols / process.env）は上位に 1 回だけ書き、各プロセスからは外す
+def install() -> None:
+    """import 時（Python が sitecustomize として読んだとき）: フックを入れる"""
+    os.makedirs(_OUT_DIR, exist_ok=True)
+    sys.addaudithook(_audit)
+    sys.setprofile(_profile)
+    threading.setprofile(_profile)
+    os.register_at_fork(after_in_child=_reset_after_fork)
+    atexit.register(_finish)
+
+
+def merge(d: str, run_id: str, out: str) -> None:
+    """プロセスごとの記録を observed.json に結合する。全プロセスで同じ節
+    （hook / modules / symbols / process.env）は上位に 1 回だけ書き、各プロセスからは外す"""
     import glob
 
-    d, run_id, out = sys.argv[1:]
     processes = [json.load(open(f)) for f in sorted(glob.glob(d + "/*.json"))]
     shared = {}
     for key in ("hook", "modules", "symbols"):
@@ -383,10 +392,9 @@ if __name__ == "__main__":
         ensure_ascii=False,
         indent=1,
     )
+
+
+if __name__ == "__main__":  # python3 sitecustomize.py <dir> <run_id> <out>
+    merge(*sys.argv[1:])
 elif _OUT_DIR:
-    os.makedirs(_OUT_DIR, exist_ok=True)
-    sys.addaudithook(_audit)
-    sys.setprofile(_profile)
-    threading.setprofile(_profile)
-    os.register_at_fork(after_in_child=_reset_after_fork)
-    atexit.register(_finish)
+    install()
