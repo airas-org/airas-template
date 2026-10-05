@@ -175,7 +175,7 @@ def main():
         subprocess.run(
             [
                 sys.executable,
-                f"{HERE}/merge_observed.py",
+                f"{HERE}/sitecustomize.py",
                 f"{tmp}/out",
                 "t",
                 f"{tmp}/observed.json",
