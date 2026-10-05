@@ -6,14 +6,18 @@
 import glob
 import json
 import os
+import secrets
 import subprocess
 import sys
 import tempfile
 import textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+SECRET = secrets.token_hex(8)  # 伏せられるべき値。実行ごとに作る
 
 UPSTREAM = """
+from pathlib import Path
+from textwrap import dedent
 def propose(data, n_basis=10, *, seed=None):
     return [1, 2, 3]
 def stream():
@@ -73,7 +77,7 @@ def main():
             "AIRAS_OBSERVE_PACKAGES": "fakepkg",
             "AIRAS_OBSERVE_COMPONENTS": "fakepkg.Controller.run,fakepkg.propose,fakepkg.stream,fakepkg.connect",
             "AIRAS_SECRET_NAMES": "MY_SECRET_VALUE",  # 基盤が渡す名前一覧
-            "MY_SECRET_VALUE": os.environ.get("MY_SECRET_VALUE", "s3cretvalue1"),
+            "MY_SECRET_VALUE": SECRET,
             "FAKE_TOKEN": "t0kenvalue2",  # 一覧に無くても名前の規則で伏せる
             "FAKE_MODE": "fast",
         }
@@ -113,10 +117,16 @@ def main():
 
         env_rec = parent["process"]["env"]
         assert env_rec["FAKE_MODE"] == "fast"
+        assert (
+            env_rec["AIRAS_SECRET_NAMES"] == "MY_SECRET_VALUE"
+        )  # 名前の一覧は伏せない
         assert env_rec["MY_SECRET_VALUE"]["redacted"] == "MY_SECRET_VALUE"
         assert env_rec["FAKE_TOKEN"]["redacted"] == "FAKE_TOKEN"
 
         syms = parent["symbols"]["fakepkg"]
+        assert (
+            "dedent" not in syms and "Path" not in syms
+        )  # import した名前は記録しない
         assert syms["propose"]["file"].endswith("src/adapter.py")
         assert syms["Controller.helper"]["file"].endswith("src/adapter.py")
         assert syms["Controller.run"]["file"].endswith("fakepkg/__init__.py")
