@@ -74,7 +74,6 @@ _active: dict[int, dict] = {}
 _seq = itertools.count()
 _calls: list[dict] = []
 _opens: dict[str, dict] = {}
-_opens_other: dict[str, int] = {}
 _connects: dict[str, dict] = {}
 _lookups: dict[str, int] = {}
 _spawns: list[dict] = []
@@ -171,7 +170,6 @@ def _profile(frame, event, arg):
             rec = {
                 "seq": next(_seq),
                 "fn": name,
-                "pid": os.getpid(),
                 "thread": threading.get_ident(),
                 "args": {
                     k: _to_json_value(loc[k], k)
@@ -196,13 +194,13 @@ def _audit(event, args):
     try:
         if event == "open":
             caller, code = _where()
-            # import 時の open と fd の open は数だけ
+            # 実験コードが起点の open だけ。import 時、fd、Python 本体配下は依存の内部なので見ない
             if (
                 code is None
                 or isinstance(args[0], int)
                 or (caller or "").startswith("<frozen importlib")
+                or str(args[0]).startswith(sys.prefix)
             ):
-                _opens_other[caller or "?"] = _opens_other.get(caller or "?", 0) + 1
                 return
             rec = _opens.setdefault(
                 f"{args[0]}", {"modes": {}, "experiment_code": code}
@@ -265,7 +263,7 @@ _HOOK_CODES = {_where.__code__, _profile.__code__, _audit.__code__}
 def _reset_after_fork():
     for c in (_calls, _spawns, _env_changes, _tamper, _errors):
         c.clear()
-    for d in (_active, _opens, _opens_other, _connects, _lookups):
+    for d in (_active, _opens, _connects, _lookups):
         d.clear()
 
 
@@ -347,7 +345,6 @@ def _finish():
         "calls": _calls,
         "reaches": {
             "opens": _opens,
-            "opens_other": _opens_other,
             "connects": _connects,
             "getaddrinfo": _lookups,
             "spawns": _spawns,
