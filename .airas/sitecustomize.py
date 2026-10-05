@@ -358,7 +358,7 @@ def _finish():
     }
     path = os.path.join(_OUT_DIR, f"{os.getpid()}-{int(_started * 1000)}.json")
     with open(path, "w") as f:
-        json.dump(out, f, ensure_ascii=False, default=str)
+        json.dump(out, f, ensure_ascii=False, default=str, indent=1)
 
 
 if _OUT_DIR:
