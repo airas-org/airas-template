@@ -21,6 +21,10 @@ on:
         description: 'Runner label (e.g., ["ubuntu-latest"], ["self-hosted", "gpu-runner"])'
         required: true
         default: '["ubuntu-latest"]'
+      secret_names:
+        description: 'Comma-separated names of the secrets registered for this repository (names only); the observation hook redacts their values from observed.json'
+        required: false
+        default: ''
 
 permissions:
   id-token: write
@@ -46,6 +50,7 @@ jobs:
     env:
       RUN_ID: ${{ inputs.run_id }}
       MODE: ${{ inputs.mode }}
+      AIRAS_SECRET_NAMES: ${{ inputs.secret_names }}
       # LLM inference experiments may use these provider keys.
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
@@ -63,16 +68,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # The run's observation hook (.airas/sitecustomize.py) redacts the values
-      # of these environment variables from observed.json. Names only; the
-      # values stay in the secrets.
-      - name: List the secret names for the observation hook
-        env:
-          SECRETS_JSON: ${{ toJSON(secrets) }}
-        run: |
-          names=$(printf '%s' "$SECRETS_JSON" | grep -o '"[A-Za-z_][A-Za-z0-9_]*":' | tr -d '":' | paste -sd,)
-          echo "AIRAS_SECRET_NAMES=$names" >> "$GITHUB_ENV"
 
       - name: Check Docker and Dockerfile availability
         id: check-docker
