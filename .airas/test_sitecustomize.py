@@ -21,6 +21,10 @@ from textwrap import dedent
 _g = {}
 exec("def generated():\\n    return 1", _g)
 generated = _g["generated"]  # __module__ が None の関数
+from dataclasses import dataclass
+@dataclass
+class Config:
+    n: int = 1
 def propose(data, n_basis=10, *, seed=None):
     return [1, 2, 3]
 def stream():
@@ -135,6 +139,10 @@ def main():
         assert (
             "generated" not in syms and parent["errors"] == []
         )  # module None でも落ちない
+        assert (
+            "Config" in syms and "Config.__init__" not in syms
+        )  # 生成メソッドは記録しない
+        assert {"FAKE_TOKEN", "MY_SECRET_VALUE"} <= set(parent["hook"]["secret_names"])
         assert (
             "Controller.ext" not in syms
         )  # 外部定義は記録しない。snapshot との突き合わせで欠落として見える

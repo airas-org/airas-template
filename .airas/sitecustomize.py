@@ -273,6 +273,15 @@ def _origin(fn) -> dict:
     return {"module": fn.__module__, "file": fn.__code__.co_filename}
 
 
+def _reexport(module: str | None, name: str) -> bool:
+    """package 内の別モジュールで定義されたものを import しているだけ（定義元で記録する）"""
+    return (
+        module != name
+        and (module or "").split(".")[0] in _PACKAGES
+        and module != "__main__"
+    )
+
+
 def _ours(module: str | None, file: str | None) -> bool:
     """監視 package で定義されたもの、または実験コード（差し替え）で定義されたものか。
     import してきた stdlib や他 package の名前は記録しない。exec で作った関数は
@@ -299,6 +308,8 @@ def _finish():
             if attr.startswith("__"):
                 continue
             try:
+                if _reexport(getattr(obj, "__module__", None), name):
+                    continue
                 if isinstance(obj, types.FunctionType):
                     if _ours(obj.__module__, obj.__code__.co_filename):
                         table[attr] = _origin(obj)
@@ -306,12 +317,15 @@ def _finish():
                     owner = sys.modules.get(obj.__module__)
                     if _ours(obj.__module__, getattr(owner, "__file__", None)):
                         table[attr] = {"module": obj.__module__}
-                    # import したクラスでも、実験コードで差し替えたメソッドは残す
+                    # import したクラスでも、実験コードで差し替えたメソッドは残す。
+                    # dataclass 等が生成したメソッド（co_filename が "<string>"）は記録しない
                     for member, value in list(vars(obj).items()):
                         if isinstance(value, (staticmethod, classmethod)):
                             value = value.__func__
-                        if isinstance(value, types.FunctionType) and _ours(
-                            value.__module__, value.__code__.co_filename
+                        if (
+                            isinstance(value, types.FunctionType)
+                            and not value.__code__.co_filename.startswith("<")
+                            and _ours(value.__module__, value.__code__.co_filename)
                         ):
                             table[f"{attr}.{member}"] = _origin(value)
             except Exception as e:  # 1 つの属性の不具合で記録全体を失わない
@@ -323,6 +337,7 @@ def _finish():
             "sha256": _file_sha(_SELF),
             "packages": sorted(_PACKAGES),
             "components": sorted(_COMPONENTS),
+            "secret_names": sorted(_SECRET_NAMES),  # 伏せた名前。値は書かない
         },
         "process": {
             "pid": os.getpid(),
