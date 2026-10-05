@@ -325,11 +325,8 @@ def _finish():
         syms[name] = table
     out = {
         "hook": {
-            "sha256": _file_sha(_SELF),
-            "packages": sorted(_PACKAGES),
-            "components": sorted(_COMPONENTS),
-            "secret_names": sorted(_SECRET_NAMES),  # 伏せた名前。値は書かない
-        },
+            "sha256": _file_sha(_SELF)
+        },  # 誰が観察したか。宣言は run yaml / record
         "process": {
             "pid": os.getpid(),
             "ppid": os.getppid(),

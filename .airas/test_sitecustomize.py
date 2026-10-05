@@ -142,7 +142,7 @@ def main():
         assert (
             "Config" in syms and "Config.__init__" not in syms
         )  # 生成メソッドは記録しない
-        assert {"FAKE_TOKEN", "MY_SECRET_VALUE"} <= set(parent["hook"]["secret_names"])
+        assert list(parent["hook"]) == ["sha256"]  # 宣言の写しは持たない
         assert (
             "Controller.ext" not in syms
         )  # 外部定義は記録しない。snapshot との突き合わせで欠落として見える
