@@ -56,7 +56,10 @@ def _secret_names() -> set[str]:
                 names = set(json.load(f))
         except (OSError, ValueError):
             pass
-    return names | {n for n in os.environ if _SECRET_NAME.search(n)}
+    # AIRAS_SECRET_NAMES は名前の一覧であって値ではない
+    return (names | {n for n in os.environ if _SECRET_NAME.search(n)}) - {
+        "AIRAS_SECRET_NAMES"
+    }
 
 
 _SECRET_NAMES = _secret_names()
@@ -270,6 +273,17 @@ def _origin(fn) -> dict:
     return {"module": fn.__module__, "file": fn.__code__.co_filename}
 
 
+def _ours(module: str | None, file: str | None) -> bool:
+    """監視 package で定義されたもの、または実験コード（差し替え）で定義されたものか。
+    import してきた stdlib や他 package の名前は記録しない。exec で作った関数は
+    module が None"""
+    return (
+        (module or "").split(".")[0] in _PACKAGES
+        or module == "__main__"
+        or bool(file and file.startswith(_EXPERIMENT_CODE))
+    )
+
+
 def _finish():
     mods, syms = {}, {}
     for name, mod in list(sys.modules.items()):
@@ -284,15 +298,25 @@ def _finish():
         for attr, obj in list(vars(mod).items()):
             if attr.startswith("__"):
                 continue
-            if isinstance(obj, types.FunctionType):
-                table[attr] = _origin(obj)
-            elif isinstance(obj, type):
-                table[attr] = {"module": obj.__module__}
-                for member, value in list(vars(obj).items()):
-                    if isinstance(value, (staticmethod, classmethod)):
-                        value = value.__func__
-                    if isinstance(value, types.FunctionType):
-                        table[f"{attr}.{member}"] = _origin(value)
+            try:
+                if isinstance(obj, types.FunctionType):
+                    if _ours(obj.__module__, obj.__code__.co_filename):
+                        table[attr] = _origin(obj)
+                elif isinstance(obj, type):
+                    owner = sys.modules.get(obj.__module__)
+                    if _ours(obj.__module__, getattr(owner, "__file__", None)):
+                        table[attr] = {"module": obj.__module__}
+                    # import したクラスでも、実験コードで差し替えたメソッドは残す
+                    for member, value in list(vars(obj).items()):
+                        if isinstance(value, (staticmethod, classmethod)):
+                            value = value.__func__
+                        if isinstance(value, types.FunctionType) and _ours(
+                            value.__module__, value.__code__.co_filename
+                        ):
+                            table[f"{attr}.{member}"] = _origin(value)
+            except Exception as e:  # 1 つの属性の不具合で記録全体を失わない
+                if len(_errors) < 100:
+                    _errors.append(f"symbols {name}.{attr}: {e!r}")
         syms[name] = table
     out = {
         "hook": {

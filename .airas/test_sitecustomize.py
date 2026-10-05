@@ -6,14 +6,21 @@
 import glob
 import json
 import os
+import secrets
 import subprocess
 import sys
 import tempfile
 import textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+SECRET = secrets.token_hex(8)  # 伏せられるべき値。実行ごとに作る
 
 UPSTREAM = """
+from pathlib import Path
+from textwrap import dedent
+_g = {}
+exec("def generated():\\n    return 1", _g)
+generated = _g["generated"]  # __module__ が None の関数
 def propose(data, n_basis=10, *, seed=None):
     return [1, 2, 3]
 def stream():
@@ -46,6 +53,8 @@ def main():
     fakepkg.propose({"headers": {"Authorization": f"Bearer {secret}"}})  # dict の repr でも
     fakepkg.propose = lambda *a, **k: []                  # 関数の差し替え
     fakepkg.Controller.helper = lambda self: 1            # メソッドの差し替え
+    fakepkg.Controller.ext = staticmethod(fakepkg.dedent) # 外部定義の関数を載せる
+    fakepkg.Path.is_dir = lambda self: True               # import したクラスのメソッドの差し替え
     os.putenv("FOO", "1")
     subprocess.run([sys.executable, "-c", "import fakepkg; fakepkg.propose(1)"], check=True)
     subprocess.run([sys.executable, "-IS", "-c", "print(1)"], check=True, capture_output=True)
@@ -73,7 +82,7 @@ def main():
             "AIRAS_OBSERVE_PACKAGES": "fakepkg",
             "AIRAS_OBSERVE_COMPONENTS": "fakepkg.Controller.run,fakepkg.propose,fakepkg.stream,fakepkg.connect",
             "AIRAS_SECRET_NAMES": "MY_SECRET_VALUE",  # 基盤が渡す名前一覧
-            "MY_SECRET_VALUE": os.environ.get("MY_SECRET_VALUE", "s3cretvalue1"),
+            "MY_SECRET_VALUE": SECRET,
             "FAKE_TOKEN": "t0kenvalue2",  # 一覧に無くても名前の規則で伏せる
             "FAKE_MODE": "fast",
         }
@@ -113,10 +122,26 @@ def main():
 
         env_rec = parent["process"]["env"]
         assert env_rec["FAKE_MODE"] == "fast"
+        assert (
+            env_rec["AIRAS_SECRET_NAMES"] == "MY_SECRET_VALUE"
+        )  # 名前の一覧は伏せない
         assert env_rec["MY_SECRET_VALUE"]["redacted"] == "MY_SECRET_VALUE"
         assert env_rec["FAKE_TOKEN"]["redacted"] == "FAKE_TOKEN"
 
         syms = parent["symbols"]["fakepkg"]
+        assert (
+            "dedent" not in syms and "Path" not in syms
+        )  # import した名前は記録しない
+        assert (
+            "generated" not in syms and parent["errors"] == []
+        )  # module None でも落ちない
+        assert (
+            "Controller.ext" not in syms
+        )  # 外部定義は記録しない。snapshot との突き合わせで欠落として見える
+        assert syms["Path.is_dir"]["file"].endswith(
+            "src/adapter.py"
+        )  # import したクラスへの差し替えは残す
+        assert "Path.exists" not in syms
         assert syms["propose"]["file"].endswith("src/adapter.py")
         assert syms["Controller.helper"]["file"].endswith("src/adapter.py")
         assert syms["Controller.run"]["file"].endswith("fakepkg/__init__.py")
