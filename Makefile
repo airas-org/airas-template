@@ -76,8 +76,7 @@ run-experiment: _require_run_id
 	AIRAS_OBSERVE_COMPONENTS="$$($(call run_config_value,observe_components))" \
 	uv run python -u -m src.main run=$$RUN_ID results_dir="$$RESULTS_DIR" mode=$$MODE || status=$$?; \
 	mkdir -p "$$RESULTS_DIR/$$RUN_ID"; \
-	python3 -c 'import glob, json, sys; d, run_id, out = sys.argv[1:]; json.dump({"version": 1, "run_id": run_id, "processes": [json.load(open(f)) for f in sorted(glob.glob(d + "/*.json"))]}, open(out, "w"), ensure_ascii=False, indent=1)' \
-	  "$$obs" "$$RUN_ID" "$$RESULTS_DIR/$$RUN_ID/observed.json" \
+	python3 .airas/sitecustomize.py "$$obs" "$$RUN_ID" "$$RESULTS_DIR/$$RUN_ID/observed.json" \
 	  || { echo "observed.json could not be merged; the raw records are kept in $$obs" >&2; test $$status -ne 0 || status=1; exit $$status; }; \
 	rm -rf "$$obs"; exit $$status
 	$(MAKE) evaluate

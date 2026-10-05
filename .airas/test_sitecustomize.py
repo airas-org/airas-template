@@ -171,6 +171,27 @@ def main():
         assert child["symbols"]["fakepkg"]["propose"]["file"].endswith(
             "fakepkg/__init__.py"
         )
+        # 結合: 全プロセスで同じ節は上位に 1 回だけ
+        subprocess.run(
+            [
+                sys.executable,
+                f"{HERE}/sitecustomize.py",
+                f"{tmp}/out",
+                "t",
+                f"{tmp}/observed.json",
+            ],
+            check=True,
+        )
+        merged = json.load(open(f"{tmp}/observed.json"))
+        assert merged["run_id"] == "t" and len(merged["processes"]) == 2
+        assert "hook" in merged and "modules" in merged
+        assert all("hook" not in p and "modules" not in p for p in merged["processes"])
+        # env は子に FOO が足されているので同じにならず、各プロセスに残る
+        assert "env" not in merged
+        assert all("env" in p["process"] for p in merged["processes"])
+        assert all(
+            "symbols" in p for p in merged["processes"]
+        )  # 親は差し替え後なので子と違う
     print("ok")
 
 
