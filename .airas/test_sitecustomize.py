@@ -20,6 +20,8 @@ def stream():
     yield "a"
     yield "b"
     return "done"
+def connect(url, api_key="x"):
+    return url
 class Controller:
     def run(self, max_iterations, eval_debug_rounds=5):
         return list(stream()) + propose(None)
@@ -38,6 +40,7 @@ def main():
     fakepkg.Controller().run(20)
     fakepkg.propose([0] * 1000, seed=3)
     t = threading.Thread(target=lambda: fakepkg.propose("thread")); t.start(); t.join()
+    fakepkg.connect("http://h:8000/v1", api_key="s3cret")
     fakepkg.propose = lambda *a, **k: []                  # 関数の差し替え
     fakepkg.Controller.helper = lambda self: 1            # メソッドの差し替え
     os.putenv("FOO", "1")
@@ -65,7 +68,9 @@ def main():
             "PYTHONPATH": HERE,
             "AIRAS_OBSERVE_DIR": f"{tmp}/out",
             "AIRAS_OBSERVE_PACKAGES": "fakepkg",
-            "AIRAS_OBSERVE_COMPONENTS": "fakepkg.Controller.run,fakepkg.propose,fakepkg.stream",
+            "AIRAS_OBSERVE_COMPONENTS": "fakepkg.Controller.run,fakepkg.propose,fakepkg.stream,fakepkg.connect",
+            "FAKE_MODE": "fast",
+            "FAKE_TOKEN": "t0ken",
         }
         subprocess.run([sys.executable, "run.py"], cwd=tmp, env=env, check=True)
         files = sorted(glob.glob(f"{tmp}/out/*.json"))
@@ -83,12 +88,18 @@ def main():
         assert calls[1] == ("fakepkg.stream", {}) and "ret" not in parent["calls"][1]
         assert calls[2][0] == "fakepkg.propose" and calls[2][1]["seed"] is None
         assert calls[3][1]["seed"] == 3 and calls[3][1]["data"]["type"] == "list"
-        assert calls[4][1]["data"]["sha256"]  # 文字列も平文では残らない
+        assert calls[4][1]["data"] == "thread"  # 秘密らしくない短い文字列はそのまま
+        assert calls[5][1]["url"] == "http://h:8000/v1"
+        assert calls[5][1]["api_key"]["sha256"]  # 名前が秘密らしい引数は隠す
         assert (
-            len(calls) == 5
+            len(calls) == 6
         )  # 差し替え後の propose は上流の code ではないので数えない
         assert parent["calls"][0]["ret"]["type"] == "list"
         assert parent["calls"][4]["thread"] != parent["calls"][0]["thread"]
+
+        env_rec = parent["process"]["env"]
+        assert env_rec["FAKE_MODE"] == "fast"
+        assert env_rec["FAKE_TOKEN"]["sha256"] and "t0ken" not in json.dumps(parent)
 
         syms = parent["symbols"]["fakepkg"]
         assert syms["propose"]["file"].endswith("src/adapter.py")

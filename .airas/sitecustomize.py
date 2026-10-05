@@ -6,12 +6,16 @@ Makefile が PYTHONPATH にこのディレクトリを足すので、Python は�
 終了時に AIRAS_OBSERVE_DIR/<pid>-<開始時刻>.json へ書くもの:
 - calls:   AIRAS_OBSERVE_COMPONENTS（module.Class.method のカンマ区切り）の関数の
            呼び出し。実際に束縛された引数（省略した既定値を含む）と戻り値。
-           数値・bool・None はそのまま、それ以外は型・長さ・sha256（秘密を残さない）
+           数値・bool・None・短い文字列はそのまま。名前が秘密らしい引数
+           （key / token / secret / password …）、長い文字列、それ以外の型は
+           型・長さ・sha256 だけ残す
 - modules: AIRAS_OBSERVE_PACKAGES（カンマ区切り）の各モジュールのファイル sha256
 - symbols: そのモジュールの関数・クラス・メソッドの定義元。monkeypatch は定義元が
            実験コード（src/）になる
 - reaches: open、connect、名前解決、子プロセス起動、環境変数の変更、このフックを
            外す操作。それぞれ起こした場所と、その上にある実験コードの場所付き
+- process: argv、Python 版、起動時の環境変数（値は引数と同じ規則で、秘密らしい名前は
+           sha256 だけ）
 
 判断はしない。Makefile がプロセス分を observed.json に結合し、gate が record の
 宣言と照合する。
@@ -22,6 +26,7 @@ import hashlib
 import itertools
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -36,6 +41,9 @@ _COMPONENTS = {
 }
 _NAMES = {c.rsplit(".", 1)[-1] for c in _COMPONENTS}
 _GENERATOR = 0x20 | 0x80 | 0x200  # CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR
+_SECRET = re.compile(
+    r"key|token|secret|passw|credential|auth|private|cookie|session", re.IGNORECASE
+)
 
 _watched: dict[types.CodeType, str] = {}
 _first_lasti: dict[types.CodeType, int] = {}
@@ -65,10 +73,13 @@ def _file_sha(path: str) -> str | None:
         return None
 
 
-def _to_json_value(v):
+def _to_json_value(v, name=""):
+    """name は引数名や環境変数名。秘密らしい名前の値は sha256 だけ残す"""
     if v is None or isinstance(v, (bool, int, float)):
         return v
     if isinstance(v, str):
+        if len(v) <= 200 and not _SECRET.search(name):
+            return v
         r = v
     else:
         try:
@@ -134,7 +145,9 @@ def _profile(frame, event, arg):
                 "pid": os.getpid(),
                 "thread": threading.get_ident(),
                 "args": {
-                    k: _to_json_value(loc[k]) for k in names if k in loc and k != "self"
+                    k: _to_json_value(loc[k], k)
+                    for k in names
+                    if k in loc and k != "self"
                 },
             }
             _calls.append(rec)
@@ -267,7 +280,7 @@ def _finish():
             "argv": sys.argv,
             "cwd": os.getcwd(),
             "python": sys.version.split()[0],
-            "env_names": sorted(os.environ),
+            "env": {k: _to_json_value(v, k) for k, v in sorted(os.environ.items())},
             "started": _started,
             "ended": time.time(),
         },
