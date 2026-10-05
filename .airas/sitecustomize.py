@@ -5,11 +5,13 @@ Makefile が PYTHONPATH にこのディレクトリを足すので、Python は�
 
 終了時に AIRAS_OBSERVE_DIR/<pid>-<開始時刻>.json へ書くもの:
 - calls:   AIRAS_OBSERVE_COMPONENTS（module.Class.method のカンマ区切り）の関数の
-           呼び出し。実際に束縛された引数（省略した既定値を含む）と戻り値
+           呼び出し。実際に束縛された引数（省略した既定値を含む）と戻り値。
+           数値・bool・None はそのまま、それ以外は型・長さ・sha256（秘密を残さない）
 - modules: AIRAS_OBSERVE_PACKAGES（カンマ区切り）の各モジュールのファイル sha256
-- symbols: そのモジュールの関数・クラスの定義元。monkeypatch は定義元が src/ になる
+- symbols: そのモジュールの関数・クラス・メソッドの定義元。monkeypatch は定義元が
+           実験コード（src/）になる
 - reaches: open、connect、名前解決、子プロセス起動、環境変数の変更、このフックを
-           外す操作。それぞれ起こした場所（src/ 配下なら agent のコード）付き
+           外す操作。それぞれ起こした場所と、その上にある実験コードの場所付き
 
 判断はしない。Makefile がプロセス分を observed.json に結合し、gate が record の
 宣言と照合する。
@@ -27,7 +29,7 @@ import types
 
 _OUT_DIR = os.environ.get("AIRAS_OBSERVE_DIR")
 _SELF = os.path.abspath(__file__)
-_AGENT = os.path.join(os.getcwd(), "src") + os.sep
+_EXPERIMENT_CODE = os.path.join(os.getcwd(), "src") + os.sep
 _PACKAGES = {p for p in os.environ.get("AIRAS_OBSERVE_PACKAGES", "").split(",") if p}
 _COMPONENTS = {
     c for c in os.environ.get("AIRAS_OBSERVE_COMPONENTS", "").split(",") if c
@@ -63,46 +65,39 @@ def _file_sha(path: str) -> str | None:
         return None
 
 
-def _val(v):
+def _to_json_value(v):
     if v is None or isinstance(v, (bool, int, float)):
         return v
     if isinstance(v, str):
-        return (
-            v
-            if len(v) <= 200
-            else {"type": "str", "len": len(v), "sha256": _sha(v.encode())}
-        )
-    try:
-        r = repr(v)
-    except Exception:
-        r = "<unrepr>"
-    if len(r) <= 200:
-        return {"type": type(v).__name__, "repr": r}
+        r = v
+    else:
+        try:
+            r = repr(v)
+        except Exception:
+            r = "<unrepr>"
     return {"type": type(v).__name__, "len": len(r), "sha256": _sha(r.encode())}
 
 
 def _where():
-    """イベントを起こした Python の場所（caller）と、その上にある src/ の場所（agent）。
-    起こしたのがこのファイル自身なら caller は "self"。"""
-    caller = agent = None
-    try:
-        f = sys._getframe(2)
-    except ValueError:  # 起動直後でまだ Python のフレームが無い
+    """イベントを起こした Python の場所（caller）と、その上にある実験コードの場所。
+    このファイルの hook 関数の分だけ上に辿る。起こしたのがこのファイル自身なら "self"。"""
+    f = sys._getframe(0)
+    while f is not None and f.f_code in _HOOK_CODES:
+        f = f.f_back
+    if f is None:
         return None, None
     if f.f_code.co_filename == _SELF:
         return "self", None
+    caller = f"{f.f_code.co_filename}:{f.f_lineno}"
     while f is not None:
-        fn = f.f_code.co_filename
-        if caller is None:
-            caller = f"{fn}:{f.f_lineno}"
-        if fn.startswith(_AGENT):
-            agent = f"{fn}:{f.f_lineno}"
-            break
+        if f.f_code.co_filename.startswith(_EXPERIMENT_CODE):
+            return caller, f"{f.f_code.co_filename}:{f.f_lineno}"
         f = f.f_back
-    return caller, agent
+    return caller, None
 
 
 def _profile(frame, event, arg):
+    # 関数の call / return を受け、監視対象の component なら引数と戻り値を _calls に積む
     if event[1] == "_":  # c_call / c_return / c_exception は見ない
         return
     try:
@@ -117,7 +112,8 @@ def _profile(frame, event, arg):
                 if name not in _COMPONENTS:
                     return
                 _watched[code] = name
-            if code.co_flags & _GENERATOR:
+            generator = code.co_flags & _GENERATOR
+            if generator:
                 # ジェネレータは再開のたびに call が来る。最小の f_lasti が初回の入口
                 first = _first_lasti.get(code)
                 if first is None or frame.f_lasti < first:
@@ -137,39 +133,44 @@ def _profile(frame, event, arg):
                 "fn": name,
                 "pid": os.getpid(),
                 "thread": threading.get_ident(),
-                "args": {k: _val(loc[k]) for k in names if k in loc and k != "self"},
+                "args": {
+                    k: _to_json_value(loc[k]) for k in names if k in loc and k != "self"
+                },
             }
             _calls.append(rec)
-            _active[id(frame)] = rec
+            if not generator:  # yield でも return が来るので戻り値は取らない
+                _active[id(frame)] = rec
         elif event == "return" and code in _watched:
             rec = _active.pop(id(frame), None)
             if rec is not None:
-                rec["ret"] = _val(arg)
+                rec["ret"] = _to_json_value(arg)
     except Exception as e:  # 観測の不具合で run を止めない
         if len(_errors) < 100:
             _errors.append(f"profile {event}: {e!r}")
 
 
 def _audit(event, args):
+    # audit イベントを受け、_where() で発生源を特定して reaches の各変数に積む
     try:
         if event == "open":
-            caller, agent = _where()
+            caller, code = _where()
             # import 時の open と fd の open は数だけ
             if (
-                agent is None
+                code is None
                 or isinstance(args[0], int)
                 or (caller or "").startswith("<frozen importlib")
             ):
                 _opens_other[caller or "?"] = _opens_other.get(caller or "?", 0) + 1
                 return
             rec = _opens.setdefault(
-                f"{args[0]}", {"mode": str(args[1]), "agent": agent, "n": 0}
+                f"{args[0]}", {"modes": {}, "experiment_code": code}
             )
-            rec["n"] += 1
+            mode = str(args[1])
+            rec["modes"][mode] = rec["modes"].get(mode, 0) + 1
         elif event == "socket.connect":
-            caller, agent = _where()
+            caller, code = _where()
             rec = _connects.setdefault(
-                str(args[1]), {"caller": caller, "agent": agent, "n": 0}
+                str(args[1]), {"caller": caller, "experiment_code": code, "n": 0}
             )
             rec["n"] += 1
         elif event == "socket.getaddrinfo":
@@ -183,32 +184,40 @@ def _audit(event, args):
             hooked = (
                 os.path.dirname(_SELF) in str(env.get("PYTHONPATH", ""))
                 and "AIRAS_OBSERVE_DIR" in env
-                and not (
-                    argv
-                    and "python" in os.path.basename(argv[0])
-                    and {"-I", "-S", "-E"} & set(argv[1:4])
-                )
             )
-            caller, agent = _where()
+            if hooked and argv and "python" in os.path.basename(argv[0]):
+                for a in argv[1:]:
+                    if not a.startswith("-"):
+                        break
+                    if not a.startswith("--") and set(a[1:]) & {"I", "S", "E"}:
+                        hooked = False
+                    if a[:2] in ("-c", "-m"):
+                        break
+            caller, code = _where()
             _spawns.append(
                 {
                     "event": event,
                     "argv": argv[:50],
                     "hooked": hooked,
                     "caller": caller,
-                    "agent": agent,
+                    "experiment_code": code,
                 }
             )
+            if event == "os.exec":  # 成功すると atexit が走らないので今書く
+                _finish()
         elif event in ("os.putenv", "os.unsetenv"):
             _env_changes.append({"event": event, "name": os.fsdecode(args[0])})
         elif event in ("sys.setprofile", "sys.settrace", "sys.addaudithook"):
-            caller, agent = _where()
+            caller, code = _where()
             if caller == "self" or (caller and os.sep + "threading.py:" in caller):
                 return
-            _tamper.append({"event": event, "caller": caller, "agent": agent})
+            _tamper.append({"event": event, "caller": caller, "experiment_code": code})
     except Exception as e:  # 観測の不具合で run を止めない
         if len(_errors) < 100:
             _errors.append(f"audit {event}: {e!r}")
+
+
+_HOOK_CODES = {_where.__code__, _profile.__code__, _audit.__code__}
 
 
 def _reset_after_fork():
@@ -216,6 +225,10 @@ def _reset_after_fork():
         c.clear()
     for d in (_active, _opens, _opens_other, _connects, _lookups):
         d.clear()
+
+
+def _origin(fn) -> dict:
+    return {"module": fn.__module__, "file": fn.__code__.co_filename}
 
 
 def _finish():
@@ -233,12 +246,14 @@ def _finish():
             if attr.startswith("__"):
                 continue
             if isinstance(obj, types.FunctionType):
-                table[attr] = {
-                    "module": obj.__module__,
-                    "file": obj.__code__.co_filename,
-                }
+                table[attr] = _origin(obj)
             elif isinstance(obj, type):
                 table[attr] = {"module": obj.__module__}
+                for member, value in list(vars(obj).items()):
+                    if isinstance(value, (staticmethod, classmethod)):
+                        value = value.__func__
+                    if isinstance(value, types.FunctionType):
+                        table[f"{attr}.{member}"] = _origin(value)
         syms[name] = table
     out = {
         "hook": {
