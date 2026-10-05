@@ -199,7 +199,7 @@ def _audit(event, args):
                 code is None
                 or isinstance(args[0], int)
                 or (caller or "").startswith("<frozen importlib")
-                or str(args[0]).startswith(sys.prefix)
+                or os.path.abspath(str(args[0])).startswith(sys.prefix + os.sep)
             ):
                 return
             rec = _opens.setdefault(
