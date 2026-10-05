@@ -66,6 +66,7 @@ def _file_sha(path: str) -> str | None:
 def _val(v):
     if v is None or isinstance(v, (bool, int, float)):
         return v
+               
     if isinstance(v, str):
         return (
             v
@@ -76,6 +77,7 @@ def _val(v):
         r = repr(v)
     except Exception:
         r = "<unrepr>"
+               
     if len(r) <= 200:
         return {"type": type(v).__name__, "repr": r}
     return {"type": type(v).__name__, "len": len(r), "sha256": _sha(r.encode())}
@@ -89,8 +91,10 @@ def _where():
         f = sys._getframe(2)
     except ValueError:  # 起動直後でまだ Python のフレームが無い
         return None, None
+               
     if f.f_code.co_filename == _SELF:
         return "self", None
+               
     while f is not None:
         fn = f.f_code.co_filename
         if caller is None:
@@ -98,13 +102,16 @@ def _where():
         if fn.startswith(_AGENT):
             agent = f"{fn}:{f.f_lineno}"
             break
+                   
         f = f.f_back
     return caller, agent
 
 
 def _profile(frame, event, arg):
+　　# 関数 call, return検知 -> _where()で発生源特定 -> グローバル変数
     if event[1] == "_":  # c_call / c_return / c_exception は見ない
         return
+
     try:
         code = frame.f_code
         if event == "call":
@@ -112,10 +119,12 @@ def _profile(frame, event, arg):
             if name is None:
                 if code.co_name not in _NAMES:
                     return
+                           
                 qualname = getattr(code, "co_qualname", code.co_name)
                 name = f"{frame.f_globals.get('__name__', '')}.{qualname}"
                 if name not in _COMPONENTS:
                     return
+                           
                 _watched[code] = name
             if code.co_flags & _GENERATOR:
                 # ジェネレータは再開のたびに call が来る。最小の f_lasti が初回の入口
@@ -124,6 +133,7 @@ def _profile(frame, event, arg):
                     _first_lasti[code] = first = frame.f_lasti
                 if frame.f_lasti > first:
                     return
+                           
             n = code.co_argcount + code.co_kwonlyargcount
             names = list(code.co_varnames[:n])
             if code.co_flags & 0x04:
@@ -151,6 +161,7 @@ def _profile(frame, event, arg):
 
 
 def _audit(event, args):
+    # audit event検知 -> _where()で発生源特定 -> グローバル変数
     try:
         if event == "open":
             caller, agent = _where()
@@ -275,8 +286,8 @@ def _finish():
         json.dump(out, f, ensure_ascii=False, default=str)
 
 
-if _OUT_DIR:
-    os.makedirs(_OUT_DIR, exist_ok=True)
+if _OUTPUT_DIR:
+    os.makedirs(_OUTPUT_DIR, exist_ok=True)
     sys.addaudithook(_audit)
     sys.setprofile(_profile)
     threading.setprofile(_profile)
