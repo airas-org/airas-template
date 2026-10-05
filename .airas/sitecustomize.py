@@ -6,16 +6,16 @@ Makefile が PYTHONPATH にこのディレクトリを足すので、Python は�
 終了時に AIRAS_OBSERVE_DIR/<pid>-<開始時刻>.json へ書くもの:
 - calls:   AIRAS_OBSERVE_COMPONENTS（module.Class.method のカンマ区切り）の関数の
            呼び出し。実際に束縛された引数（省略した既定値を含む）と戻り値。
-           数値・bool・None・短い文字列はそのまま。名前が秘密らしい引数
-           （key / token / secret / password …）、長い文字列、それ以外の型は
-           型・長さ・sha256 だけ残す
+           値は平文（200 文字超は型・長さ・sha256）。ただし秘密の値を含む文字列は
+           `{"redacted": <環境変数名>, "len": n}` に置き換える。秘密の値は、基盤が
+           AIRAS_SECRET_NAMES で渡す名前（Actions secrets の一覧。ローカルでは
+           ~/.airas/credentials.json のキー）の環境変数から集める
 - modules: AIRAS_OBSERVE_PACKAGES（カンマ区切り）の各モジュールのファイル sha256
 - symbols: そのモジュールの関数・クラス・メソッドの定義元。monkeypatch は定義元が
            実験コード（src/）になる
 - reaches: open、connect、名前解決、子プロセス起動、環境変数の変更、このフックを
            外す操作。それぞれ起こした場所と、その上にある実験コードの場所付き
-- process: argv、Python 版、起動時の環境変数（値は引数と同じ規則で、秘密らしい名前は
-           sha256 だけ）
+- process: argv、Python 版、起動時の環境変数（値は引数と同じ規則）
 
 判断はしない。Makefile がプロセス分を observed.json に結合し、gate が record の
 宣言と照合する。
@@ -41,9 +41,29 @@ _COMPONENTS = {
 }
 _NAMES = {c.rsplit(".", 1)[-1] for c in _COMPONENTS}
 _GENERATOR = 0x20 | 0x80 | 0x200  # CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR
-_SECRET = re.compile(
+_SECRET_NAME = re.compile(
     r"key|token|secret|passw|credential|auth|private|cookie|session", re.IGNORECASE
 )
+
+
+def _secret_names() -> set[str]:
+    """伏せる環境変数の名前。基盤が渡す AIRAS_SECRET_NAMES（Actions secrets の名前一覧）、
+    無ければローカルの ~/.airas/credentials.json のキー。名前の規則は足し忘れの保険"""
+    names = {n for n in os.environ.get("AIRAS_SECRET_NAMES", "").split(",") if n}
+    if not names:
+        try:
+            with open(os.path.expanduser("~/.airas/credentials.json")) as f:
+                names = set(json.load(f))
+        except (OSError, ValueError):
+            pass
+    return names | {n for n in os.environ if _SECRET_NAME.search(n)}
+
+
+_SECRET_NAMES = _secret_names()
+# 伏せる値 → 名前。8 文字未満は誤爆するので対象外
+_SECRET_VALUES = {
+    os.environ[n]: n for n in _SECRET_NAMES if len(os.environ.get(n, "")) >= 8
+}
 
 _watched: dict[types.CodeType, str] = {}
 _first_lasti: dict[types.CodeType, int] = {}
@@ -74,18 +94,24 @@ def _file_sha(path: str) -> str | None:
 
 
 def _to_json_value(v, name=""):
-    """name は引数名や環境変数名。秘密らしい名前の値は sha256 だけ残す"""
+    """name は引数名か環境変数名。秘密の名前の値と、秘密の値を含む文字列は伏せる"""
     if v is None or isinstance(v, (bool, int, float)):
         return v
+    try:
+        r = v if isinstance(v, str) else repr(v)
+    except Exception:
+        r = "<unrepr>"
+    secret = name if name in _SECRET_NAMES else None
+    if secret is None:
+        secret = next((n for s, n in _SECRET_VALUES.items() if s in r), None)
+    if secret is not None:
+        return {"redacted": secret, "len": len(r)}
     if isinstance(v, str):
-        if len(v) <= 200 and not _SECRET.search(name):
+        if len(v) <= 200:
             return v
-        r = v
-    else:
-        try:
-            r = repr(v)
-        except Exception:
-            r = "<unrepr>"
+        return {"type": "str", "len": len(v), "sha256": _sha(v.encode())}
+    if len(r) <= 200:
+        return {"type": type(v).__name__, "repr": r}
     return {"type": type(v).__name__, "len": len(r), "sha256": _sha(r.encode())}
 
 

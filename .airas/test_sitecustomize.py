@@ -12,6 +12,7 @@ import tempfile
 import textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+SECRET = "s3cretvalue1"
 
 UPSTREAM = """
 def propose(data, n_basis=10, *, seed=None):
@@ -29,7 +30,7 @@ class Controller:
         return 0
 """
 
-EXPERIMENT = """
+EXPERIMENT = f"""
 import os, socket, subprocess, sys, threading
 import fakepkg
 def main():
@@ -40,7 +41,9 @@ def main():
     fakepkg.Controller().run(20)
     fakepkg.propose([0] * 1000, seed=3)
     t = threading.Thread(target=lambda: fakepkg.propose("thread")); t.start(); t.join()
-    fakepkg.connect("http://h:8000/v1", api_key="s3cret")
+    fakepkg.connect("http://h:8000/v1", api_key="{SECRET}")          # 値で伏せる
+    fakepkg.connect("http://h:8000/v1?k={SECRET}", api_key="short")  # URL に含まれても伏せる
+    fakepkg.propose({{"headers": {{"Authorization": "Bearer {SECRET}"}}}})  # dict の repr でも
     fakepkg.propose = lambda *a, **k: []                  # 関数の差し替え
     fakepkg.Controller.helper = lambda self: 1            # メソッドの差し替え
     os.putenv("FOO", "1")
@@ -69,8 +72,10 @@ def main():
             "AIRAS_OBSERVE_DIR": f"{tmp}/out",
             "AIRAS_OBSERVE_PACKAGES": "fakepkg",
             "AIRAS_OBSERVE_COMPONENTS": "fakepkg.Controller.run,fakepkg.propose,fakepkg.stream,fakepkg.connect",
+            "AIRAS_SECRET_NAMES": "MY_SECRET_VALUE",  # 基盤が渡す名前一覧
+            "MY_SECRET_VALUE": SECRET,
+            "FAKE_TOKEN": "t0kenvalue2",  # 一覧に無くても名前の規則で伏せる
             "FAKE_MODE": "fast",
-            "FAKE_TOKEN": "t0ken",
         }
         subprocess.run([sys.executable, "run.py"], cwd=tmp, env=env, check=True)
         files = sorted(glob.glob(f"{tmp}/out/*.json"))
@@ -88,18 +93,28 @@ def main():
         assert calls[1] == ("fakepkg.stream", {}) and "ret" not in parent["calls"][1]
         assert calls[2][0] == "fakepkg.propose" and calls[2][1]["seed"] is None
         assert calls[3][1]["seed"] == 3 and calls[3][1]["data"]["type"] == "list"
-        assert calls[4][1]["data"] == "thread"  # 秘密らしくない短い文字列はそのまま
+        assert calls[4][1]["data"] == "thread"  # 平文
         assert calls[5][1]["url"] == "http://h:8000/v1"
-        assert calls[5][1]["api_key"]["sha256"]  # 名前が秘密らしい引数は隠す
+        assert calls[5][1]["api_key"] == {
+            "redacted": "MY_SECRET_VALUE",
+            "len": len(SECRET),
+        }
+        assert calls[6][1]["url"]["redacted"] == "MY_SECRET_VALUE"
+        assert calls[6][1]["api_key"] == "short"
+        assert calls[7][1]["data"]["redacted"] == "MY_SECRET_VALUE"
         assert (
-            len(calls) == 6
+            len(calls) == 8
         )  # 差し替え後の propose は上流の code ではないので数えない
         assert parent["calls"][0]["ret"]["type"] == "list"
         assert parent["calls"][4]["thread"] != parent["calls"][0]["thread"]
+        assert SECRET not in json.dumps(parent) and "t0kenvalue2" not in json.dumps(
+            parent
+        )
 
         env_rec = parent["process"]["env"]
         assert env_rec["FAKE_MODE"] == "fast"
-        assert env_rec["FAKE_TOKEN"]["sha256"] and "t0ken" not in json.dumps(parent)
+        assert env_rec["MY_SECRET_VALUE"]["redacted"] == "MY_SECRET_VALUE"
+        assert env_rec["FAKE_TOKEN"]["redacted"] == "FAKE_TOKEN"
 
         syms = parent["symbols"]["fakepkg"]
         assert syms["propose"]["file"].endswith("src/adapter.py")

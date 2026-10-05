@@ -64,6 +64,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # The run's observation hook (.airas/sitecustomize.py) redacts the values
+      # of these environment variables from observed.json. Names only; the
+      # values stay in the secrets.
+      - name: List the secret names for the observation hook
+        env:
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+        run: |
+          names=$(printf '%s' "$SECRETS_JSON" | grep -o '"[A-Za-z_][A-Za-z0-9_]*":' | tr -d '":' | paste -sd,)
+          echo "AIRAS_SECRET_NAMES=$names" >> "$GITHUB_ENV"
+
       - name: Check Docker and Dockerfile availability
         id: check-docker
         run: |
@@ -150,7 +160,7 @@ jobs:
 
             docker run --rm $GPU_FLAGS \
               -v "$(pwd)/$RESULTS_DIR:/workspace/$RESULTS_DIR" \
-              -e RUN_ID -e MODE -e RESULTS_DIR -e GITHUB_SHA \
+              -e RUN_ID -e MODE -e RESULTS_DIR -e GITHUB_SHA -e AIRAS_SECRET_NAMES \
               -e ANTHROPIC_API_KEY \
               -e AWS_BEARER_TOKEN_BEDROCK \
               -e GEMINI_API_KEY \
