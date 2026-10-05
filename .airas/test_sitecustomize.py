@@ -12,7 +12,6 @@ import tempfile
 import textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SECRET = "s3cretvalue1"
 
 UPSTREAM = """
 def propose(data, n_basis=10, *, seed=None):
@@ -30,10 +29,11 @@ class Controller:
         return 0
 """
 
-EXPERIMENT = f"""
+EXPERIMENT = """
 import os, socket, subprocess, sys, threading
 import fakepkg
 def main():
+    secret = os.environ["MY_SECRET_VALUE"]
     open(__file__).close()
     open(os.path.join(os.environ["AIRAS_OBSERVE_DIR"], "w.txt"), "w").close()
     open(os.path.join(os.environ["AIRAS_OBSERVE_DIR"], "w.txt"), "a").close()
@@ -41,9 +41,9 @@ def main():
     fakepkg.Controller().run(20)
     fakepkg.propose([0] * 1000, seed=3)
     t = threading.Thread(target=lambda: fakepkg.propose("thread")); t.start(); t.join()
-    fakepkg.connect("http://h:8000/v1", api_key="{SECRET}")          # 値で伏せる
-    fakepkg.connect("http://h:8000/v1?k={SECRET}", api_key="short")  # URL に含まれても伏せる
-    fakepkg.propose({{"headers": {{"Authorization": "Bearer {SECRET}"}}}})  # dict の repr でも
+    fakepkg.connect("http://h:8000/v1", api_key=secret)          # 値で伏せる
+    fakepkg.connect(f"http://h:8000/v1?k={secret}", api_key="short")  # URL に含まれても伏せる
+    fakepkg.propose({"headers": {"Authorization": f"Bearer {secret}"}})  # dict の repr でも
     fakepkg.propose = lambda *a, **k: []                  # 関数の差し替え
     fakepkg.Controller.helper = lambda self: 1            # メソッドの差し替え
     os.putenv("FOO", "1")
@@ -73,7 +73,7 @@ def main():
             "AIRAS_OBSERVE_PACKAGES": "fakepkg",
             "AIRAS_OBSERVE_COMPONENTS": "fakepkg.Controller.run,fakepkg.propose,fakepkg.stream,fakepkg.connect",
             "AIRAS_SECRET_NAMES": "MY_SECRET_VALUE",  # 基盤が渡す名前一覧
-            "MY_SECRET_VALUE": SECRET,
+            "MY_SECRET_VALUE": os.environ.get("MY_SECRET_VALUE", "s3cretvalue1"),
             "FAKE_TOKEN": "t0kenvalue2",  # 一覧に無くても名前の規則で伏せる
             "FAKE_MODE": "fast",
         }
