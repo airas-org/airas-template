@@ -35,7 +35,7 @@ jobs:
           GH_PERSONAL_ACCESS_TOKEN: ${{ github.token }}
         run: |
           # airas の commit SHA は、airas 側の CI（pin_airas_template.yml）によって自動的に書き換えられる。
-          uvx --from "airas @ git+https://github.com/airas-org/airas.git@e079ac0921b728e1127668121d9a4b78f9c54b38#subdirectory=backend" \
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@b6232babf7f300f34a5e1e5a1571f48955c93c1d#subdirectory=backend" \
             airas verify-record --local-path .
 
       - name: Cross-check paper.pdf against the Publish Paper artifact
