@@ -26,6 +26,7 @@ _g = {}
 exec("def generated():\\n    return 1", _g)
 generated = _g["generated"]  # __module__ が None の関数
 from dataclasses import dataclass
+from abc import abstractmethod  # <frozen abc> 由来。定義として記録しない
 @dataclass
 class Config:
     n: int = 1
@@ -143,8 +144,8 @@ def main():
 
         syms = parent["loaded_definitions"]["fakepkg"]
         assert (
-            "dedent" not in syms and "Path" not in syms
-        )  # import した名前は記録しない
+            "dedent" not in syms and "Path" not in syms and "abstractmethod" not in syms
+        )  # import した名前は記録しない（stdlib の frozen モジュール由来も）
         assert (
             syms["generated"]["file"] == "<string>" and parent["errors"] == []
         )  # exec 由来（module None）は出自不明として残し、落ちない
