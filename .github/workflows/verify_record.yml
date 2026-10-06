@@ -34,6 +34,7 @@ jobs:
           SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
           GH_PERSONAL_ACCESS_TOKEN: ${{ github.token }}
         run: |
+          # airas の commit SHA は airas 側の CI（pin_airas_template.yml）が自動で書き換える。手で変えない
           uvx --from "airas @ git+https://github.com/airas-org/airas.git@e079ac0921b728e1127668121d9a4b78f9c54b38#subdirectory=backend" \
             airas verify-record --local-path .
 
