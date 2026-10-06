@@ -36,5 +36,5 @@ jobs:
           SEYVAL_API_KEY: ${{ secrets.SEYVAL_API_KEY }}
           GH_PERSONAL_ACCESS_TOKEN: ${{ github.token }}
         run: |
-          uvx --from "airas @ git+https://github.com/airas-org/airas.git@main#subdirectory=backend" \
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@d409c0f15ed18ccebf3781b9e5f96b0bf1683a04#subdirectory=backend" \
             airas verify-paper --local-path .
