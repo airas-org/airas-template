@@ -4,13 +4,15 @@ Makefile が PYTHONPATH にこのディレクトリを足すので、Python は�
 このファイルを import する。AIRAS_OBSERVE_DIR が無ければ何もしない。
 
 終了時に AIRAS_OBSERVE_DIR/<pid>-<開始時刻>.json へ書くもの:
-- calls:   AIRAS_OBSERVE_COMPONENTS（module.Class.method のカンマ区切り）の関数の
-           呼び出し。実際に束縛された引数（省略した既定値を含む）と戻り値。
+- calls:   AIRAS_OBSERVE_INTEGRATION（run の design の repository_integration から:
+           走らせるリポジトリの method_entry と、値を宣言した各 argument の関数。Makefile が
+           `sitecustomize.py integration <run_id>` で引く）の関数の呼び出し。
+           実際に束縛された引数（省略した既定値を含む）と戻り値。
            値は平文（200 文字超は型・長さ・sha256）。ただし秘密の値を含む文字列は
            `{"redacted": <環境変数名>, "len": n}` に置き換える。秘密の値は、基盤が
            AIRAS_SECRET_NAMES で渡す名前（Actions secrets の一覧。ローカルでは
            ~/.airas/credentials.json のキー）の環境変数から集める
-- modules: AIRAS_OBSERVE_PACKAGES（カンマ区切り）の各モジュールのファイル sha256
+- modules: method_entry のパッケージの各モジュールのファイル sha256
 - symbols: そのモジュールの関数・クラス・メソッドの定義元。monkeypatch は定義元が
            実験コード（src/）になる
 - reaches: open、connect、名前解決、子プロセス起動、環境変数の変更、このフックを
@@ -35,10 +37,14 @@ import types
 _OUT_DIR = os.environ.get("AIRAS_OBSERVE_DIR")
 _SELF = os.path.abspath(__file__)
 _EXPERIMENT_CODE = os.path.join(os.getcwd(), "src") + os.sep
-_PACKAGES = {p for p in os.environ.get("AIRAS_OBSERVE_PACKAGES", "").split(",") if p}
+_INTEGRATION = json.loads(os.environ.get("AIRAS_OBSERVE_INTEGRATION") or "{}")
+_ENTRY = _INTEGRATION.get("method_entry", "")
+# argument は module.Class.method.arg なので、最後の arg を落とした関数を観測する
 _COMPONENTS = {
-    c for c in os.environ.get("AIRAS_OBSERVE_COMPONENTS", "").split(",") if c
-}
+    _ENTRY,
+    *(a.rsplit(".", 1)[0] for a in _INTEGRATION.get("arguments", [])),
+} - {""}
+_PACKAGES = {_ENTRY.split(".")[0]} if _ENTRY else set()
 _NAMES = {c.rsplit(".", 1)[-1] for c in _COMPONENTS}
 _GENERATOR = 0x20 | 0x80 | 0x200  # CO_GENERATOR | CO_COROUTINE | CO_ASYNC_GENERATOR
 _SECRET_NAME = re.compile(
@@ -326,7 +332,7 @@ def _finish():
     out = {
         "hook": {
             "sha256": _file_sha(_SELF)
-        },  # 誰が観察したか。宣言は run yaml / record
+        },  # 誰が観察したか。宣言は record
         "process": {
             "pid": os.getpid(),
             "ppid": os.getppid(),
@@ -365,6 +371,33 @@ def install() -> None:
     atexit.register(_finish)
 
 
+def integration(run_id: str) -> dict:
+    """run_id の design の repository_integration から、フックが観測するもの: 走らせる
+    リポジトリ（s1.r1）の method_entry と各 argument。凍結前は design.json（id は並び順
+    s1, s2, … / r1, r2, …）、凍結後は record。record は追記式なので最後の宣言が生きる"""
+    found = {}
+    for path in (".research/design.json", ".research/record.json"):
+        if not os.path.exists(path):
+            continue
+        doc = json.load(open(path))
+        repositories = {}
+        for i, s in enumerate(doc.get("literature", [])):
+            sid = s.get("id", f"s{i + 1}")
+            for j, r in enumerate(s.get("repositories", [])):
+                repositories[r.get("id", f"{sid}.r{j + 1}")] = r
+        for h in doc.get("hypotheses", []):
+            for c in h.get("claims", []):
+                for d in c.get("designs", []):
+                    if any(r.get("run_id") == run_id for r in d.get("runs", [])):
+                        integration = d.get("repository_integration") or {}
+                        repository = repositories.get(integration.get("repository_id"), {})
+                        found = {
+                            "method_entry": repository.get("method_entry", ""),
+                            "arguments": [a["argument"] for a in integration.get("arguments", [])],
+                        }
+    return found
+
+
 def merge(d: str, run_id: str, out: str) -> None:
     """プロセスごとの記録を observed.json に結合する。全プロセスで同じ節
     （hook / modules / symbols / process.env）は上位に 1 回だけ書き、各プロセスからは外す"""
@@ -391,7 +424,10 @@ def merge(d: str, run_id: str, out: str) -> None:
     )
 
 
-if __name__ == "__main__":  # python3 sitecustomize.py <dir> <run_id> <out>
-    merge(*sys.argv[1:])
+if __name__ == "__main__":
+    if sys.argv[1] == "integration":  # python3 sitecustomize.py integration <run_id>
+        print(json.dumps(integration(sys.argv[2])))
+    else:  # python3 sitecustomize.py merge <dir> <run_id> <out>
+        merge(*sys.argv[2:])
 elif _OUT_DIR:
     install()

@@ -13,6 +13,10 @@ import tempfile
 import textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+INTEGRATION = {  # フックが観測するもの: method_entry と、argument（module.Class.method.arg）の関数
+    "method_entry": "fakepkg.Controller.run",
+    "arguments": ["fakepkg.propose.seed", "fakepkg.stream.n", "fakepkg.connect.url"],
+}
 SECRET = secrets.token_hex(8)  # 伏せられるべき値。実行ごとに作る
 
 UPSTREAM = """
@@ -83,8 +87,7 @@ def main():
             **os.environ,
             "PYTHONPATH": HERE,
             "AIRAS_OBSERVE_DIR": f"{tmp}/out",
-            "AIRAS_OBSERVE_PACKAGES": "fakepkg",
-            "AIRAS_OBSERVE_COMPONENTS": "fakepkg.Controller.run,fakepkg.propose,fakepkg.stream,fakepkg.connect",
+            "AIRAS_OBSERVE_INTEGRATION": json.dumps(INTEGRATION),
             "AIRAS_SECRET_NAMES": "MY_SECRET_VALUE",  # 基盤が渡す名前一覧
             "MY_SECRET_VALUE": SECRET,
             "FAKE_TOKEN": "t0kenvalue2",  # 一覧に無くても名前の規則で伏せる
@@ -176,6 +179,7 @@ def main():
             [
                 sys.executable,
                 f"{HERE}/sitecustomize.py",
+                "merge",
                 f"{tmp}/out",
                 "t",
                 f"{tmp}/observed.json",
@@ -192,6 +196,42 @@ def main():
         assert all(
             "symbols" in p for p in merged["processes"]
         )  # 親は差し替え後なので子と違う
+        # integration: run の design の repository_integration から、文献（凍結前は並び順の id）の
+        # method_entry と各 argument
+        os.makedirs(f"{tmp}/.research")
+        arguments = [{"argument": a, "value": 1} for a in INTEGRATION["arguments"]]
+        design = {
+            "literature": [
+                {"url": "x"},
+                {"title": "y", "repositories": [{"method_entry": INTEGRATION["method_entry"]}]},
+            ],
+            "hypotheses": [
+                {
+                    "claims": [
+                        {
+                            "designs": [
+                                {"runs": [{"run_id": "other"}], "repository_integration": {"repository_id": "s1.r1"}},
+                                {
+                                    "runs": [{"run_id": "t"}],
+                                    "repository_integration": {"repository_id": "s2.r1", "arguments": arguments},
+                                },
+                            ]
+                        }
+                    ]
+                }
+            ],
+        }
+        with open(f"{tmp}/.research/design.json", "w") as f:
+            json.dump(design, f)
+        for run_id, expected in (("t", INTEGRATION), ("undeclared", {})):
+            out = subprocess.run(
+                [sys.executable, f"{HERE}/sitecustomize.py", "integration", run_id],
+                cwd=tmp,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            assert json.loads(out) == expected, out
     print("ok")
 
 
