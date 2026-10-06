@@ -305,8 +305,13 @@ def _upstream_extensions() -> dict:
             if bases:
                 found[f"{name}.{attr}"] = {
                     "bases": [f"{b.__module__}.{b.__qualname__}" for b in bases],
+                    # 基底にもある関数メンバーだけ。ABC が置く _abc_impl などの属性は数えない
                     "overrides": [
-                        m for m in vars(obj) if not m.startswith("__") and any(m in vars(b) for b in bases)
+                        m
+                        for m, v in vars(obj).items()
+                        if not m.startswith("__")
+                        and isinstance(v, (types.FunctionType, staticmethod, classmethod))
+                        and any(m in vars(b) for b in bases)
                     ],
                 }
     return found

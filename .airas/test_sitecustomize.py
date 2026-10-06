@@ -37,7 +37,8 @@ def stream():
     return "done"
 def connect(url, api_key="x"):
     return url
-class Controller:
+import abc
+class Controller(abc.ABC):  # ABC は _abc_impl を各クラスに置く。override に数えないこと
     def run(self, max_iterations, eval_debug_rounds=5):
         return list(stream()) + propose(None)
     def helper(self):
