@@ -416,13 +416,17 @@ def integration(run_id: str) -> dict:
         for h in doc.get("hypotheses", []):
             for c in h.get("claims", []):
                 for d in c.get("designs", []):
-                    if any(r.get("run_id") == run_id for r in d.get("runs", [])):
-                        integration = d.get("repository_integration") or {}
-                        repository = repositories.get(integration.get("repository_id"), {})
-                        found = {
-                            "method_entry": repository.get("method_entry", ""),
-                            "arguments": [a["argument"] for a in integration.get("arguments", [])],
-                        }
+                    if not any(r.get("run_id") == run_id for r in d.get("runs", [])):
+                        continue
+                    integration = d.get("repository_integration")
+                    if not integration:  # 最新の宣言に統合が無ければ観測対象なし
+                        found = {}
+                        continue
+                    repository = repositories.get(integration.get("repository_id"), {})
+                    found = {
+                        "method_entry": repository.get("method_entry", ""),
+                        "arguments": [a["argument"] for a in integration.get("arguments", [])],
+                    }
     return found
 
 

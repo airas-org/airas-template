@@ -242,6 +242,48 @@ def main():
                 text=True,
             ).stdout
             assert json.loads(out) == expected, out
+        # 凍結後は record（明示 id）が design.json より優先し、追記式なので同じ run の最後の宣言が生きる
+        record = {
+            "literature": [
+                {"id": "s1", "repositories": [{"id": "s1.r1", "method_entry": "fakepkg.Controller.helper"}]}
+            ],
+            "hypotheses": [
+                {
+                    "claims": [
+                        {
+                            "designs": [
+                                {
+                                    "runs": [{"run_id": "t"}],
+                                    "repository_integration": {"repository_id": "s1.r1", "arguments": arguments},
+                                },
+                                {
+                                    "runs": [{"run_id": "t"}],
+                                    "repository_integration": {
+                                        "repository_id": "s1.r1",
+                                        "arguments": [{"argument": "fakepkg.propose.n_basis", "value": 2}],
+                                    },
+                                },
+                                {"runs": [{"run_id": "plain"}]},
+                            ]
+                        }
+                    ]
+                }
+            ],
+        }
+        with open(f"{tmp}/.research/record.json", "w") as f:
+            json.dump(record, f)
+        for run_id, expected in (
+            ("t", {"method_entry": "fakepkg.Controller.helper", "arguments": ["fakepkg.propose.n_basis"]}),
+            ("plain", {}),
+        ):
+            out = subprocess.run(
+                [sys.executable, f"{HERE}/sitecustomize.py", "integration", run_id],
+                cwd=tmp,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            assert json.loads(out) == expected, out
     print("ok")
 
 
