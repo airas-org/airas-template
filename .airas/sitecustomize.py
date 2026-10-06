@@ -337,8 +337,8 @@ def _finish():
                 if owner != name and (owner or "").split(".")[0] in _PACKAGES:
                     continue
                 if isinstance(obj, types.FunctionType):
-                    # exec で作った関数（定義元 "<string>"）は出自不明なので残す
-                    if _ours(obj.__module__, obj.__code__.co_filename) or obj.__code__.co_filename.startswith("<"):
+                    # exec で作った関数（定義元 "<string>"）は出自不明なので残す。stdlib の "<frozen …>" は対象外
+                    if _ours(obj.__module__, obj.__code__.co_filename) or obj.__code__.co_filename.startswith("<string>"):
                         table[attr] = _origin(obj)
                 elif isinstance(obj, type):
                     owner = sys.modules.get(obj.__module__)
@@ -352,7 +352,7 @@ def _finish():
                             value = value.__func__
                         if not isinstance(value, types.FunctionType):
                             continue
-                        generated = value.__code__.co_filename.startswith("<")
+                        generated = value.__code__.co_filename.startswith("<string>")
                         if generated and member.startswith("__"):
                             continue
                         if generated or _ours(value.__module__, value.__code__.co_filename):
