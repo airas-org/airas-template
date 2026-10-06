@@ -12,9 +12,12 @@ Makefile が PYTHONPATH にこのディレクトリを足すので、Python は�
            `{"redacted": <環境変数名>, "len": n}` に置き換える。秘密の値は、基盤が
            AIRAS_SECRET_NAMES で渡す名前（Actions secrets の一覧。ローカルでは
            ~/.airas/credentials.json のキー）の環境変数から集める
-- modules: method_entry のパッケージの各モジュールのファイル sha256
-- symbols: そのモジュールの関数・クラス・メソッドの定義元。monkeypatch は定義元が
-           実験コード（src/）になる
+- loaded_file_hashes: import された上流パッケージ（method_entry のパッケージ）の各ファイルの
+           sha256。record のスナップショットと比べ、原本のまま走ったかを見る
+- loaded_definitions: 上流の各クラス・関数・メソッドの定義元。monkeypatch は定義元が
+           実験コード（src/）になり、exec で作ったものは "<string>" になる
+- upstream_extensions: 実験コードで定義されたクラスのうち上流クラスを継承するもの。
+           基底と、基底にもあるメソッド名（override）
 - reaches: open、connect、名前解決、子プロセス起動、環境変数の変更、このフックを
            外す操作。それぞれ起こした場所と、その上にある実験コードの場所付き
 - process: argv、Python 版、起動時の環境変数（値は引数と同じ規則）
@@ -288,6 +291,27 @@ def _ours(module: str | None, file: str | None) -> bool:
     )
 
 
+def _upstream_extensions() -> dict:
+    """実験コード（src/ と __main__）で定義されたクラスのうち、上流クラスを継承するもの"""
+    found = {}
+    for name, mod in list(sys.modules.items()):
+        file = getattr(mod, "__file__", None)
+        if not (name == "__main__" or (file and file.startswith(_EXPERIMENT_CODE))):
+            continue
+        for attr, obj in list(vars(mod).items()):
+            if not (isinstance(obj, type) and obj.__module__ == name):
+                continue
+            bases = [b for b in obj.__mro__[1:] if b.__module__.split(".")[0] in _PACKAGES]
+            if bases:
+                found[f"{name}.{attr}"] = {
+                    "bases": [f"{b.__module__}.{b.__qualname__}" for b in bases],
+                    "overrides": [
+                        m for m in vars(obj) if not m.startswith("__") and any(m in vars(b) for b in bases)
+                    ],
+                }
+    return found
+
+
 def _finish():
     mods, syms = {}, {}
     for name, mod in list(sys.modules.items()):
@@ -308,26 +332,29 @@ def _finish():
                 if owner != name and (owner or "").split(".")[0] in _PACKAGES:
                     continue
                 if isinstance(obj, types.FunctionType):
-                    if _ours(obj.__module__, obj.__code__.co_filename):
+                    # exec で作った関数（定義元 "<string>"）は出自不明なので残す
+                    if _ours(obj.__module__, obj.__code__.co_filename) or obj.__code__.co_filename.startswith("<"):
                         table[attr] = _origin(obj)
                 elif isinstance(obj, type):
                     owner = sys.modules.get(obj.__module__)
                     if _ours(obj.__module__, getattr(owner, "__file__", None)):
                         table[attr] = {"module": obj.__module__}
                     # import したクラスでも、実験コードで差し替えたメソッドは残す。
-                    # dataclass 等が生成したメソッド（co_filename が "<string>"）は記録しない
+                    # dataclass 等が生成した dunder（co_filename "<string>"）は記録しないが、
+                    # 通常名のメソッドが "<string>" なら exec による差し替えの疑いがあるので残す
                     for member, value in list(vars(obj).items()):
                         if isinstance(value, (staticmethod, classmethod)):
                             value = value.__func__
-                        if (
-                            isinstance(value, types.FunctionType)
-                            and not value.__code__.co_filename.startswith("<")
-                            and _ours(value.__module__, value.__code__.co_filename)
-                        ):
+                        if not isinstance(value, types.FunctionType):
+                            continue
+                        generated = value.__code__.co_filename.startswith("<")
+                        if generated and member.startswith("__"):
+                            continue
+                        if generated or _ours(value.__module__, value.__code__.co_filename):
                             table[f"{attr}.{member}"] = _origin(value)
             except Exception as e:  # 1 つの属性の不具合で記録全体を失わない
                 if len(_errors) < 100:
-                    _errors.append(f"symbols {name}.{attr}: {e!r}")
+                    _errors.append(f"definitions {name}.{attr}: {e!r}")
         syms[name] = table
     out = {
         "hook": {
@@ -343,8 +370,9 @@ def _finish():
             "started": _started,
             "ended": time.time(),
         },
-        "modules": mods,
-        "symbols": syms,
+        "loaded_file_hashes": mods,
+        "loaded_definitions": syms,
+        "upstream_extensions": _upstream_extensions(),
         "calls": _calls,
         "reaches": {
             "opens": _opens,
@@ -400,12 +428,12 @@ def integration(run_id: str) -> dict:
 
 def merge(d: str, run_id: str, out: str) -> None:
     """プロセスごとの記録を observed.json に結合する。全プロセスで同じ節
-    （hook / modules / symbols / process.env）は上位に 1 回だけ書き、各プロセスからは外す"""
+    （hook / loaded_* / upstream_extensions / process.env）は上位に 1 回だけ書き、各プロセスからは外す"""
     import glob
 
     processes = [json.load(open(f)) for f in sorted(glob.glob(d + "/*.json"))]
     shared = {}
-    for key in ("hook", "modules", "symbols"):
+    for key in ("hook", "loaded_file_hashes", "loaded_definitions", "upstream_extensions"):
         values = [p[key] for p in processes if p.get(key)]
         if values and all(v == values[0] for v in values):
             shared[key] = values[0]

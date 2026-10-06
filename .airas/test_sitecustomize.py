@@ -47,6 +47,11 @@ class Controller:
 EXPERIMENT = """
 import os, socket, subprocess, sys, threading
 import fakepkg
+class Tuned(fakepkg.Controller):                              # 継承と override
+    def run(self, *a, **k):
+        return super().run(*a, **k)
+    def extra(self):
+        return 0
 def main():
     secret = os.environ["MY_SECRET_VALUE"]
     open(__file__).close()
@@ -135,13 +140,13 @@ def main():
         assert env_rec["MY_SECRET_VALUE"]["redacted"] == "MY_SECRET_VALUE"
         assert env_rec["FAKE_TOKEN"]["redacted"] == "FAKE_TOKEN"
 
-        syms = parent["symbols"]["fakepkg"]
+        syms = parent["loaded_definitions"]["fakepkg"]
         assert (
             "dedent" not in syms and "Path" not in syms
         )  # import した名前は記録しない
         assert (
-            "generated" not in syms and parent["errors"] == []
-        )  # module None でも落ちない
+            syms["generated"]["file"] == "<string>" and parent["errors"] == []
+        )  # exec 由来（module None）は出自不明として残し、落ちない
         assert (
             "Config" in syms and "Config.__init__" not in syms
         )  # 生成メソッドは記録しない
@@ -156,7 +161,10 @@ def main():
         assert syms["propose"]["file"].endswith("src/adapter.py")
         assert syms["Controller.helper"]["file"].endswith("src/adapter.py")
         assert syms["Controller.run"]["file"].endswith("fakepkg/__init__.py")
-        assert parent["modules"]["fakepkg"]["sha256"]
+        assert parent["loaded_file_hashes"]["fakepkg"]["sha256"]
+        assert parent["upstream_extensions"] == {
+            "adapter.Tuned": {"bases": ["fakepkg.Controller"], "overrides": ["run"]}
+        }
 
         r = parent["reaches"]
         assert r["opens"][f"{tmp}/src/adapter.py"]["modes"] == {"r": 1}
@@ -171,7 +179,7 @@ def main():
         assert r["tamper"][0]["experiment_code"].startswith(f"{tmp}/src/")
 
         assert [c["fn"] for c in child["calls"]] == ["fakepkg.propose"]
-        assert child["symbols"]["fakepkg"]["propose"]["file"].endswith(
+        assert child["loaded_definitions"]["fakepkg"]["propose"]["file"].endswith(
             "fakepkg/__init__.py"
         )
         # 結合: 全プロセスで同じ節は上位に 1 回だけ
@@ -188,13 +196,15 @@ def main():
         )
         merged = json.load(open(f"{tmp}/observed.json"))
         assert merged["run_id"] == "t" and len(merged["processes"]) == 2
-        assert "hook" in merged and "modules" in merged
-        assert all("hook" not in p and "modules" not in p for p in merged["processes"])
+        assert "hook" in merged and "loaded_file_hashes" in merged
+        assert all(
+            "hook" not in p and "loaded_file_hashes" not in p for p in merged["processes"]
+        )
         # env は子に FOO が足されているので同じにならず、各プロセスに残る
         assert "env" not in merged
         assert all("env" in p["process"] for p in merged["processes"])
         assert all(
-            "symbols" in p for p in merged["processes"]
+            "loaded_definitions" in p for p in merged["processes"]
         )  # 親は差し替え後なので子と違う
         # integration: run の design の repository_integration から、文献（凍結前は並び順の id）の
         # method_entry と各 argument
