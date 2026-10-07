@@ -95,7 +95,10 @@ jobs:
       - name: Prepare results dir
         # 同じ run の前回の出力を残さない: checkout に import 済みの出力があると実験がそこから再開してモデルを呼ばない(Seyval は実行前に空にする)
         run: |
-          test -n "$RUN_ID"
+          # Makefile の _require_run_id より先に走るので、ここでも同じ検証をしてから消す(../ で results の外へ出さない)
+          case "$RUN_ID" in
+            ""|*[!A-Za-z0-9_.-]*|.*) echo "::error::RUN_ID '$RUN_ID' may hold only letters, digits, '_', '.' and '-', and may not start with '.'"; exit 1 ;;
+          esac
           rm -rf "$RESULTS_DIR/$RUN_ID"
           mkdir -p "$RESULTS_DIR"
 
