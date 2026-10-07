@@ -93,7 +93,11 @@ jobs:
           echo "has_dockerfile=$has_dockerfile" >> "$GITHUB_OUTPUT"
 
       - name: Prepare results dir
-        run: mkdir -p "$RESULTS_DIR"
+        # 同じ run の前回の出力を残さない: checkout に import 済みの出力があると実験がそこから再開してモデルを呼ばない(Seyval は実行前に空にする)
+        run: |
+          test -n "$RUN_ID"
+          rm -rf "$RESULTS_DIR/$RUN_ID"
+          mkdir -p "$RESULTS_DIR"
 
       # A repository that ships a Dockerfile runs in it, or not at all: the
       # native path is for runners without Docker, not for an image that does
