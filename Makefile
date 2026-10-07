@@ -21,8 +21,10 @@
 #
 # Metrics are computed by airas-eval, never by experiment code. The experiment
 # writes raw evaluation inputs; this Makefile runs the pinned airas-eval CLI on
-# them. Task types come from the research plan (.research/evaluation.json);
-# workflows may override via AIRAS_EVAL_TASKS. Scores seen here are for the
+# them. Task types come from the run config's `tasks:` when a run writes inputs
+# for only some of the plan's task types (e.g. a small and a large split), else
+# from the research plan (.research/evaluation.json); workflows may override
+# via AIRAS_EVAL_TASKS. Scores seen here are for the
 # agent's own iteration — the official numbers are recomputed by AIRAS from the
 # same input files in an environment the agent cannot edit. Likewise lean.json
 # is written by airas-report, never by the proof's author, for the record gate
@@ -32,7 +34,6 @@ RESULTS_DIR      ?= .research/results
 MODE             ?= full
 EVAL_PLAN        ?= .research/evaluation.json
 LEAN_DIR         ?= lean
-AIRAS_EVAL_TASKS ?= $(shell python3 -c 'import json,sys; d=json.load(open("$(EVAL_PLAN)")); print(" ".join(d.get("task_types", [])))')
 AIRAS_EVAL        = uv run --group eval airas-eval
 
 # RUN_ID and MODE come from workflow inputs and the run config's values from a
@@ -40,12 +41,18 @@ AIRAS_EVAL        = uv run --group eval airas-eval
 # `$(call run_config_value,key)` into a local) and check their characters
 # before using them: pasting them into recipe text would let a value such as
 # `$(...)` run as a command, or a RUN_ID such as `../x` write outside RESULTS_DIR.
-export RUN_ID MODE RESULTS_DIR LEAN_DIR
+export RUN_ID MODE RESULTS_DIR LEAN_DIR AIRAS_EVAL_TASKS
 
 # Shell text that prints `key: value` from config/run/$RUN_ID.yaml, with quotes
 # and a trailing comment stripped. $(1) is a literal key from this Makefile.
 run_config_value  = sed -n 's/^$(1):[[:space:]]*//p' "config/run/$$RUN_ID.yaml" 2>/dev/null \
                       | sed -e 's/[[:space:]]*\#.*$$//' -e 's/^"\(.*\)"$$/\1/' -e "s/^'\(.*\)'$$/\1/" | head -1
+
+# Shell text that puts the task types to score into $$tasks: AIRAS_EVAL_TASKS, else the run
+# config's `tasks:` (one line, space-separated or [a, b]), else every task type in the plan.
+# Not a make variable: $(shell) cannot see RUN_ID, and pasting its value into make text would run `$(...)`.
+eval_tasks        = tasks=$$(echo $${AIRAS_EVAL_TASKS:-$$($(call run_config_value,tasks) | tr '[],"' '    ')}); \
+                    test -n "$$tasks" || tasks=$$(python3 -c 'import json; print(" ".join(json.load(open("$(EVAL_PLAN)")).get("task_types", [])))')
 
 .PHONY: run run-experiment run-lean evaluate validate-inputs schema list-tasks
 
@@ -109,7 +116,7 @@ run-lean: _require_run_id
 ## Score every task type in the plan for one run: make evaluate RUN_ID=<run_id>
 evaluate: _require_run_id _require_tasks
 	@mkdir -p "$(RESULTS_DIR)/$(RUN_ID)/evaluation"
-	@for t in $(AIRAS_EVAL_TASKS); do \
+	@$(eval_tasks); for t in $$tasks; do \
 		echo "=== [AIRAS-EVAL] $$t for $(RUN_ID)"; \
 		$(AIRAS_EVAL) score $$t \
 			--inputs "$(RESULTS_DIR)/$(RUN_ID)/eval_inputs/$$t.json" \
@@ -118,17 +125,17 @@ evaluate: _require_run_id _require_tasks
 
 ## Check the input files against the contract without scoring
 validate-inputs: _require_run_id _require_tasks
-	@for t in $(AIRAS_EVAL_TASKS); do \
+	@$(eval_tasks); for t in $$tasks; do \
 		$(AIRAS_EVAL) validate $$t --inputs "$(RESULTS_DIR)/$(RUN_ID)/eval_inputs/$$t.json" || exit 1; \
 	done
 
 ## Print the JSON Schema of the input file(s) the experiment must produce
 schema: _require_tasks
-	@for t in $(AIRAS_EVAL_TASKS); do $(AIRAS_EVAL) schema $$t; done
+	@$(eval_tasks); for t in $$tasks; do $(AIRAS_EVAL) schema $$t; done
 
 ## Print what each planned task type returns
 list-tasks: _require_tasks
-	@for t in $(AIRAS_EVAL_TASKS); do $(AIRAS_EVAL) list $$t; done
+	@$(eval_tasks); for t in $$tasks; do $(AIRAS_EVAL) list $$t; done
 
 _require_run_id:
 	@test -n "$$RUN_ID" || { echo "RUN_ID is required, e.g. make evaluate RUN_ID=proposed-resnet-cifar10"; exit 1; }
@@ -136,4 +143,4 @@ _require_run_id:
 	  echo "RUN_ID '$$RUN_ID' may hold only letters, digits, '_', '.' and '-', and may not start with '.'"; exit 1 ;; esac
 
 _require_tasks:
-	@test -n "$(AIRAS_EVAL_TASKS)" || { echo "no task types: $(EVAL_PLAN) has no task_types and AIRAS_EVAL_TASKS is unset"; exit 1; }
+	@$(eval_tasks); test -n "$$tasks" || { echo "no task types: $(EVAL_PLAN) has no task_types, config/run/$$RUN_ID.yaml has no tasks: and AIRAS_EVAL_TASKS is unset"; exit 1; }
