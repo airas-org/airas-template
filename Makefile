@@ -51,7 +51,7 @@ run_config_value  = sed -n 's/^$(1):[[:space:]]*//p' "config/run/$$RUN_ID.yaml" 
 # Shell text that puts the task types to score into $$tasks: AIRAS_EVAL_TASKS, else the run
 # config's `tasks:` (one line, space-separated or [a, b]), else every task type in the plan.
 # Not a make variable: $(shell) cannot see RUN_ID, and pasting its value into make text would run `$(...)`.
-eval_tasks        = tasks=$$(echo $${AIRAS_EVAL_TASKS:-$$($(call run_config_value,tasks) | tr '[],"' '    ')}); \
+eval_tasks        = tasks=$$(echo $${AIRAS_EVAL_TASKS:-$$($(call run_config_value,tasks) | tr "[],'\"" '     ')}); \
                     test -n "$$tasks" || tasks=$$(python3 -c 'import json; print(" ".join(json.load(open("$(EVAL_PLAN)")).get("task_types", [])))')
 
 .PHONY: run run-experiment run-lean evaluate validate-inputs schema list-tasks
