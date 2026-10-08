@@ -380,7 +380,10 @@ def _reset_after_fork():
 
 
 def _origin(fn) -> dict:
-    return {"module": fn.__module__, "file": fn.__code__.co_filename}
+    file = fn.__code__.co_filename
+    if file.startswith(_CWD + os.sep):  # 実験コードは cwd からの相対パスで。gate は "src/" で見る
+        file = os.path.relpath(file, _CWD)
+    return {"module": fn.__module__, "file": file}
 
 
 def _ours(module: str | None, file: str | None) -> bool:
