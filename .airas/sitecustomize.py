@@ -417,7 +417,7 @@ def _definitions():
     unlocked = _unlocked_packages()
     for name, mod in list(sys.modules.items()):
         file = getattr(mod, "__file__", None)
-        if not file or file.startswith(_EXPERIMENT_CODE):
+        if not file or file.startswith(_EXPERIMENT_CODE) or file == _SELF:
             continue
         installed = "site-packages" in file or "dist-packages" in file
         if not _is_stdlib(file) and (not installed or name.split(".")[0] in unlocked):
