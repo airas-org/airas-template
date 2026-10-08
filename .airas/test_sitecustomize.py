@@ -15,6 +15,7 @@ import textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SECRET = secrets.token_hex(8)  # 伏せられるべき値。実行ごとに作る
+QUOTED_SECRET = 'ab"cd\nefgh' + secrets.token_hex(4)  # JSON でエスケープされる文字を含む秘密
 
 UPSTREAM = """
 from pathlib import Path
@@ -119,6 +120,8 @@ def main():
     fakepkg.connect("http://h:8000/v1", api_key=secret)          # 値で伏せる
     fakepkg.connect(f"http://h:8000/v1?k={secret}", api_key="short")  # URL に含まれても伏せる
     fakepkg.propose({"headers": {"Authorization": f"Bearer {secret}"}})  # dict の repr でも
+    fakepkg.propose({"password": os.environ["MY_QUOTED_SECRET"]})          # JSON でエスケープされる秘密でも
+    fakepkg.propose({1: "a", "1": "b"})                                   # 文字列でない鍵は JSON で壊れるので値にしない
     fakepkg.propose = lambda *a, **k: []                  # 関数の差し替え
     fakepkg.Controller.helper = lambda self: 1            # メソッドの差し替え
     fakepkg.Controller.ext = staticmethod(fakepkg.dedent) # 外部定義の関数を載せる。記録しない
@@ -164,8 +167,9 @@ def main():
             **os.environ,
             "PYTHONPATH": HERE,
             "AIRAS_OBSERVE_DIR": f"{tmp}/out",
-            "AIRAS_SECRET_NAMES": "MY_SECRET_VALUE",  # 基盤が渡す名前一覧
+            "AIRAS_SECRET_NAMES": "MY_SECRET_VALUE,MY_QUOTED_SECRET",  # 基盤が渡す名前一覧
             "MY_SECRET_VALUE": SECRET,
+            "MY_QUOTED_SECRET": QUOTED_SECRET,
             "FAKE_TOKEN": "t0kenvalue2",  # 一覧に無くても名前の規則で伏せる
             "FAKE_MODE": "fast",
         }
@@ -185,14 +189,14 @@ def main():
             check=True,
         )
         merged = json.load(open(f"{tmp}/observed.json"))
-        assert merged["version"] == 2 and merged["run_id"] == "t"
+        assert merged["version"] == 3 and merged["run_id"] == "t"
         assert merged["errors"] == [], merged["errors"]
         assert len(merged["processes"]) == 2
         # env は子に FOO が足されているので同じにならず、各プロセスに残る
         assert "env" not in merged and all("env" in p for p in merged["processes"])
         env_rec = {e["name"]: e for e in next(p["env"] for p in merged["processes"] if p["argv"] == ["run.py"])}
         assert env_rec["FAKE_MODE"] == {"name": "FAKE_MODE", "value": "fast"}
-        assert env_rec["AIRAS_SECRET_NAMES"]["value"] == "MY_SECRET_VALUE"  # 名前の一覧は伏せない
+        assert env_rec["AIRAS_SECRET_NAMES"]["value"] == "MY_SECRET_VALUE,MY_QUOTED_SECRET"  # 名前の一覧は伏せない
         assert env_rec["MY_SECRET_VALUE"]["redacted"] == "MY_SECRET_VALUE"
         assert env_rec["FAKE_TOKEN"]["redacted"] == "FAKE_TOKEN"
 
@@ -215,15 +219,18 @@ def main():
         }
         assert "fakepkg.stream" not in calls and "fakepkg.inner" not in calls  # 依存同士の呼び出し
         propose = calls["fakepkg.propose"]
-        assert propose["calls"] == 3  # 実験コードから 3 回。run() の中の 1 回と差し替え後の lambda は数えない
+        assert propose["calls"] == 5  # 実験コードから 5 回。run() の中の 1 回と差し替え後の lambda は数えない
         assert arg(propose, "seed")["values"] == [
-            {"value": None, "calls": 2},
+            {"value": None, "calls": 4},
             {"value": 3, "calls": 1},
         ]
         data = arg(propose, "data")
         assert {"value": "thread", "calls": 1} in data["values"]  # 平文
         assert any(e.get("redacted") == "MY_SECRET_VALUE" for e in data["values"])  # 小さい dict の中の秘密
-        assert data["distinct"] == 2 and data["length_max"] == 1000  # 大きい list は型と長さだけで、値の一覧には入らない
+        assert any(e.get("redacted") == "MY_QUOTED_SECRET" for e in data["values"])  # エスケープされていても
+        assert not any(e.get("value") == {"1": "b"} for e in data["values"])  # 鍵が潰れた辞書を値にしない
+        assert all("value" in e or "sha256" in e or "redacted" in e for e in data["values"])  # 型だけの項目は一覧に無い
+        assert data["distinct"] == 3 and data["length_max"] == 1000  # 大きい list と壊れる辞書は値の一覧に入らない
         connect = calls["fakepkg.connect"]
         assert connect["calls"] == 2
         assert arg(connect, "api_key")["values"] == [
@@ -260,6 +267,7 @@ def main():
         assert "adapter.Tuned" not in calls  # クラス本体の実行は呼び出しではない
         dumped = json.dumps(merged)
         assert SECRET not in dumped and "t0kenvalue2" not in dumped and "sk-" + "a" * 30 not in dumped
+        assert QUOTED_SECRET not in dumped and json.dumps(QUOTED_SECRET)[1:-1] not in dumped
 
         assert merged["src_modules"] == {
             "src/adapter.py": hashlib.sha256(textwrap.dedent(EXPERIMENT).encode()).hexdigest()

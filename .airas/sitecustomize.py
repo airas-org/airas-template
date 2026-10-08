@@ -1,4 +1,4 @@
-"""`make run` が起動した Python プロセスの実行記録（version 2）。
+"""`make run` が起動した Python プロセスの実行記録（version 3）。
 
 Makefile が PYTHONPATH にこのディレクトリを足すので、Python はどのコードより先に
 このファイルを import する。AIRAS_OBSERVE_DIR が無ければ何もしない。終了時に
@@ -128,6 +128,15 @@ def _relative(file: str) -> str:
     return os.path.relpath(file, _CWD) if file.startswith(_CWD + os.sep) else file
 
 
+def _json_safe(v) -> bool:
+    """JSON にして元に戻せるか。文字列でない辞書の鍵は json.dumps が文字列に潰すので除く"""
+    if isinstance(v, dict):
+        return all(isinstance(k, str) and _json_safe(x) for k, x in v.items())
+    if isinstance(v, (list, tuple, set, frozenset)):
+        return all(_json_safe(x) for x in v)
+    return True
+
+
 def _item(v, name: str = "") -> dict:
     """観測した値 1 件の記録。value があれば本物の値、無ければ中身は保存していない（docstring 参照）。
     name は引数名か環境変数名。中身を保存しない大きいものは repr も取らない（ホットループで重い）"""
@@ -136,17 +145,25 @@ def _item(v, name: str = "") -> dict:
     text, value = None, None
     if isinstance(v, str):
         text = value = v
-    elif isinstance(v, (list, tuple, set, frozenset, dict)) and len(v) <= _SMALL:
+    elif isinstance(v, (list, tuple, set, frozenset, dict)) and len(v) <= _SMALL and _json_safe(v):
         try:
             value = sorted(v, key=repr) if isinstance(v, (set, frozenset)) else v
-            text = json.dumps(value, ensure_ascii=False)
+            text = json.dumps(value, ensure_ascii=False, sort_keys=True)  # gate と同じ正規形で hash する
             value = json.loads(text)
         except (TypeError, ValueError):
             text = value = None
     if text is not None:
         secret = name if name in _SECRET_NAMES else None
         if secret is None:
-            secret = next((n for sv, n in _SECRET_VALUES.items() if sv in text), None)
+            # コンテナの中の秘密は JSON でエスケープされているので、その形でも探す
+            secret = next(
+                (
+                    n
+                    for sv, n in _SECRET_VALUES.items()
+                    if sv in text or json.dumps(sv, ensure_ascii=False)[1:-1] in text
+                ),
+                None,
+            )
         if secret is not None:
             return {"redacted": secret, "len": len(text)}
         if len(text) <= 200 and not _KEY_LIKE.search(text):
@@ -488,7 +505,7 @@ def _extensions() -> dict:
 def _finish():
     hashes, redefined = _definitions()
     out = {
-        "version": 2,
+        "version": 3,
         "hook": {"sha256": _file_sha(_SELF)},  # 誰が観察したか
         "process": {
             "pid": os.getpid(),
@@ -559,7 +576,7 @@ def merge(d: str, run_id: str, out: str) -> None:
         (json.load(open(f)) for f in glob.glob(d + "/*.json")),
         key=lambda p: p["process"]["started"],
     )
-    merged: dict = {"version": 2, "run_id": run_id}
+    merged: dict = {"version": 3, "run_id": run_id}
     for p in processes:
         p.pop("version", None)
         process = p.pop("process")
