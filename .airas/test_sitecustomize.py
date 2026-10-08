@@ -60,6 +60,8 @@ def inner(y):                   # 依存同士の呼び出し。記録しない
     return y
 def helper_fn(x):
     return inner(x)
+def consume(obj):               # オブジェクトしか受けない: 値の一覧は無く、型だけ残る
+    return obj
 def _private(x):                # 依存の内部名。記録しない
     return x
 class Thing:
@@ -102,6 +104,7 @@ def main():
     fakepkg.helper_fn("sk-" + "a" * 30)                       # 鍵の形は sha に
     fakepkg.helper_fn(object())                               # アドレス入り repr は型だけ
     fakepkg.create("m")                                       # 省略の印の n は記録しない
+    fakepkg.consume(object())
     fakepkg.reduce(1)                                         # numpy 流の印も同じ
     fakepkg._private(1)
     fakepkg.Thing(3)
@@ -187,9 +190,9 @@ def main():
         assert len(merged["processes"]) == 2
         # env は子に FOO が足されているので同じにならず、各プロセスに残る
         assert "env" not in merged and all("env" in p for p in merged["processes"])
-        env_rec = next(p["env"] for p in merged["processes"] if p["argv"] == ["run.py"])
-        assert env_rec["FAKE_MODE"] == "fast"
-        assert env_rec["AIRAS_SECRET_NAMES"] == "MY_SECRET_VALUE"  # 名前の一覧は伏せない
+        env_rec = {e["name"]: e for e in next(p["env"] for p in merged["processes"] if p["argv"] == ["run.py"])}
+        assert env_rec["FAKE_MODE"] == {"name": "FAKE_MODE", "value": "fast"}
+        assert env_rec["AIRAS_SECRET_NAMES"]["value"] == "MY_SECRET_VALUE"  # 名前の一覧は伏せない
         assert env_rec["MY_SECRET_VALUE"]["redacted"] == "MY_SECRET_VALUE"
         assert env_rec["FAKE_TOKEN"]["redacted"] == "FAKE_TOKEN"
 
@@ -206,7 +209,10 @@ def main():
             "max": 20,
         }
         assert arg(run, "eval_debug_rounds")["values"] == [{"value": 5, "calls": 1}]
-        assert run["samples"][0]["ret"]["type"] == "list"
+        assert run["samples"][0] == {
+            "args": [{"name": "max_iterations", "value": 20}, {"name": "eval_debug_rounds", "value": 5}],
+            "ret": {"value": ["a", "b", 1, 2, 3]},  # JSON にできる小さいコンテナは値のまま
+        }
         assert "fakepkg.stream" not in calls and "fakepkg.inner" not in calls  # 依存同士の呼び出し
         propose = calls["fakepkg.propose"]
         assert propose["calls"] == 3  # 実験コードから 3 回。run() の中の 1 回と差し替え後の lambda は数えない
@@ -214,28 +220,27 @@ def main():
             {"value": None, "calls": 2},
             {"value": 3, "calls": 1},
         ]
-        data = {json.dumps(v["value"], sort_keys=True) for v in arg(propose, "data")["values"]}
-        assert json.dumps("thread") in data  # 平文
-        assert json.dumps({"type": "list"}, sort_keys=True) in data  # 大きいコンテナは型だけ
-        assert any('"redacted": "MY_SECRET_VALUE"' in d for d in data)  # 小さい dict の repr の中の秘密
-        assert arg(propose, "data")["length_max"] == 1000
+        data = arg(propose, "data")
+        assert {"value": "thread", "calls": 1} in data["values"]  # 平文
+        assert any(e.get("redacted") == "MY_SECRET_VALUE" for e in data["values"])  # 小さい dict の中の秘密
+        assert data["distinct"] == 2 and data["length_max"] == 1000  # 大きい list は型と長さだけで、値の一覧には入らない
         connect = calls["fakepkg.connect"]
         assert connect["calls"] == 2
-        assert {json.dumps(v["value"]) for v in arg(connect, "api_key")["values"]} == {
-            json.dumps({"redacted": "MY_SECRET_VALUE", "len": len(SECRET)}),
-            json.dumps("short"),
-        }
-        assert any(
-            isinstance(v["value"], dict) and v["value"].get("redacted") == "MY_SECRET_VALUE"
-            for v in arg(connect, "url")["values"]
-        )  # URL に含まれても伏せる
+        assert arg(connect, "api_key")["values"] == [
+            {"redacted": "MY_SECRET_VALUE", "len": len(SECRET), "calls": 1},
+            {"value": "short", "calls": 1},
+        ]
+        assert any(e.get("redacted") == "MY_SECRET_VALUE" for e in arg(connect, "url")["values"])  # URL に含まれても伏せる
         helper = calls["fakepkg.helper_fn"]
         assert helper["calls"] == 4
-        kinds = {json.dumps(v["value"], sort_keys=True) for v in arg(helper, "x")["values"]}
-        assert json.dumps(7) in kinds
-        assert any('"sha256"' in k and '"len": 33' in k for k in kinds)  # 鍵の形は sha
-        assert any('"type": "dict"' in k and '"sha256"' in k for k in kinds)  # 辞書の中の鍵も
-        assert json.dumps({"type": "object"}, sort_keys=True) in kinds  # アドレスは残さない
+        x = arg(helper, "x")
+        assert {"value": 7, "calls": 1} in x["values"]
+        assert any(e.get("type") == "str" and e.get("len") == 33 and "sha256" in e and "value" not in e for e in x["values"])  # 鍵の形は値を持たず sha だけ
+        assert any(e.get("type") == "dict" and "sha256" in e for e in x["values"])  # 辞書の中の鍵も
+        assert not any(e.get("type") == "object" for e in x["values"])  # オブジェクトは値の一覧に入らない
+        assert x["type"] == "dict|int|object|str" and x["distinct"] == 3
+        obj = arg(calls["fakepkg.consume"], "obj")
+        assert obj["type"] == "object" and "values" not in obj and "distinct" not in obj  # 型だけ
         assert [a["name"] for a in calls["fakepkg.create"]["args"]] == ["model"]  # 省略の印は値ではない
         assert [a["name"] for a in calls["fakepkg.reduce"]["args"]] == ["a"]
         assert "fakepkg._private" not in calls
@@ -247,7 +252,7 @@ def main():
         text = arg(calls["adapter.prompt"], "text")
         assert text["distinct"] == 2 and text["calls"] == 6
         assert (text["length_min"], text["length_max"]) == (300, 400)
-        assert all("sha256" in v["value"] for v in text["values"])
+        assert all(v.get("truncated") and "sha256" in v and "value" not in v for v in text["values"])
         gen = calls["adapter.gen"]
         assert gen["calls"] == 1 and "ret" not in gen["samples"][0]  # 再開は数えず、戻り値も取らない
         assert calls["adapter.main"]["calls"] == 1
