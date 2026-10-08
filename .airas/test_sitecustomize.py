@@ -50,6 +50,11 @@ def inner(y):                   # 依存同士の呼び出し。記録しない
     return y
 def helper_fn(x):
     return inner(x)
+def _private(x):                # 依存の内部名。記録しない
+    return x
+class Thing:
+    def __init__(self, n):      # 依存の __init__ は見る
+        self.n = n
 """
 
 FAKEDEP = """
@@ -87,6 +92,9 @@ def main():
     fakepkg.helper_fn("sk-" + "a" * 30)                       # 鍵の形は sha に
     fakepkg.helper_fn(object())                               # アドレス入り repr は型だけ
     fakepkg.create("m")                                       # 省略の印の n は記録しない
+    fakepkg._private(1)
+    fakepkg.Thing(3)
+    exec("x = 1")                                             # 実験コードが直接呼んだ exec
     open(__file__).close()
     open(os.path.join(os.environ["AIRAS_OBSERVE_DIR"], "w.txt"), "w").close()
     open(os.path.join(os.environ["AIRAS_OBSERVE_DIR"], "w.txt"), "a").close()
@@ -203,6 +211,8 @@ def main():
         assert any('"type": "dict"' in k and '"sha256"' in k for k in kinds)  # 辞書の中の鍵も
         assert json.dumps({"type": "object"}, sort_keys=True) in kinds  # アドレスは残さない
         assert list(calls["fakepkg.create"]["args"]) == ["model"]  # 省略の印は値ではない
+        assert "fakepkg._private" not in calls
+        assert calls["fakepkg.Thing.__init__"]["args"]["n"]["values"] == [{"value": 3, "calls": 1}]
         step = calls["adapter.step"]
         assert step["calls"] == 61  # 親 60 回 + 子 1 回
         assert step["args"]["i"]["distinct"] == 61 and len(step["args"]["i"]["values"]) == 50
@@ -226,12 +236,11 @@ def main():
         assert hashes["fakepkg"]["sha256"] and hashes["fakedep"]["sha256"]
         assert "os" not in hashes and "pathlib" not in hashes  # stdlib は hash しない
         assert merged["redefinitions"] == {
-            "fakepkg.generated": "<string>",  # exec 由来は出自不明として残す
             "fakepkg.propose": "src/adapter.py",
             "fakepkg.Controller.helper": "src/adapter.py",
             "pathlib.Path.is_dir": "src/adapter.py",  # import したクラスへの差し替えは定義元のモジュールで見る
             "fakedep.Client": "src/adapter.py",  # クラスごとの差し替え
-        }  # Config の生成 dunder、外部定義の Controller.ext、import しただけの名前は含まない
+        }  # exec 由来の generated、Config の生成 dunder、外部定義の Controller.ext、import しただけの名前は含まない
         assert merged["extensions"] == {
             "adapter.Tuned": {"bases": ["fakepkg.Controller"], "overrides": ["run"]}
         }  # abc.ABC は stdlib なので基底に数えない
@@ -243,6 +252,8 @@ def main():
         assert r["getaddrinfo"] == {"localhost": 1}
         assert [(s["hooked"], s["n"]) for s in r["spawns"]] == [(True, 1), (False, 1)]
         assert r["env_changes"] == {"FOO": 1}
+        (exec_at, exec_n), = r["execs"].items()
+        assert exec_at.startswith(f"{tmp}/src/adapter.py:") and exec_n == 1  # 実験コードの行で 1 回
         assert [t["event"] for t in r["tamper"]] == ["sys.setprofile"]
         assert r["tamper"][0]["experiment_code"].startswith(f"{tmp}/src/")
     print("ok")
