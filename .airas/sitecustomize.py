@@ -3,30 +3,28 @@
 Makefile が PYTHONPATH にこのディレクトリを足すので、Python はどのコードより先に
 このファイルを import する。AIRAS_OBSERVE_DIR が無ければ何もしない。終了時に
 AIRAS_OBSERVE_DIR/<pid>-<開始時刻>.json へ書き、Makefile が `merge` で observed.json に結合する。
+record の宣言は読まない。観測の範囲が宣言で狭まらないためで、何を宣言と比べるかは gate が決める。
 
-- calls: 関数ごとに 1 項目。対象は実験コード（src/）で定義された関数、実験コードから直接
-  呼ばれた依存の関数（stdlib と依存同士の呼び出しは除く）、宣言された関数（AIRAS_OBSERVE_INTEGRATION:
-  run の design の repository_integration の method_entry と各 argument の関数。Makefile が
-  `sitecustomize.py integration <run_id>` で引く）。項目は呼び出し回数、引数ごとの
+- calls: 関数ごとに 1 項目。対象は実験コード（src/）で定義された関数と、実験コードから直接
+  呼ばれた依存の関数（stdlib と、依存同士の呼び出しは除く）。項目は呼び出し回数、引数ごとの
   「取った値 → 回数」（回数の多い 50 値。異なり数は 1000 まで数え、そこまでは回数も正確。
-  数値は min/max、長さのあるものは length_min/max）、先頭 3 回の全引数と戻り値。宣言された関数は
-  全呼び出しで値を記録し、それ以外は 4 回目からスカラーと文字列だけ値を見て、他は型と長さだけ見る。
-  値は平文（200 文字超は型・長さ・sha256。メモリアドレス入りの repr は型だけ）。秘密の値を含む
-  文字列は `{"redacted": <環境変数名>, "len": n}` に、鍵の形（sk- / ghp_ / hf_ / AKIA / JWT …）は
-  sha256 に置き換える。秘密の値は、基盤が AIRAS_SECRET_NAMES で渡す名前（Actions secrets の一覧。
-  ローカルでは ~/.airas/credentials.json のキー）の環境変数から集める
-- src_modules: 実験コードの各ファイルの sha256。そのコードが初めて走った時（import 直後）に読むので
-  後からの書き換えは入らない（.pyc は見ない）。gate が実行コミットの同じファイルと比べる
-- loaded_file_hashes / loaded_definitions: 上流パッケージ（method_entry のパッケージ）の各ファイルの
-  sha256 と、各名前の定義元。monkeypatch は定義元が src/ に、exec で作ったものは "<string>" になる
-- foreign_definitions: 上流以外の依存の名前のうち定義元が実験コードのもの（差し替え）
-- upstream_extensions: 実験コードのクラスのうち上流クラスを継承するもの。基底と override したメソッド名
+  数値は min/max、長さのあるものは length_min/max）、先頭 3 回の全引数と戻り値。
+  値はスカラー・文字列・要素 20 個以下のコンテナなら中身（200 文字超は型・長さ・sha256。
+  メモリアドレス入りの repr は型だけ）、それより大きいものは型と長さだけ。
+  秘密の値を含む文字列は `{"redacted": <環境変数名>, "len": n}` に、鍵の形（sk- / ghp_ / hf_ /
+  AKIA / JWT …）は sha256 に置き換える。秘密の値は、基盤が AIRAS_SECRET_NAMES で渡す名前
+  （Actions secrets の一覧。ローカルでは ~/.airas/credentials.json のキー）の環境変数から集める
+- src_modules: 実験コードの各ファイルの sha256。そのコードが初めて走った時（import 直後）に
+  読むので、後からの書き換えは入らない（.pyc は見ない）。gate が実行コミットの同じファイルと比べる
+- loaded_file_hashes: import された stdlib 以外の全モジュールのファイルの sha256。gate が record の
+  リポジトリのスナップショットと比べ、上流が原本のまま走ったかを見る
+- redefinitions: 依存（上流を含む）の名前空間にある名前のうち、定義元が実験コードか exec のもの。
+  monkeypatch とクラスの差し替え
+- extensions: 実験コードのクラスのうち stdlib 以外のクラスを継承するもの。基底と override したメソッド名
 - reaches: 実験コードが起点の open（インタプリタと依存の配下は除く。一時ディレクトリはディレクトリに
   畳む）、connect、名前解決、実験コードが起動した（または python の）子プロセス、実験コードによる
   環境変数の変更、このフックを外す操作。回数で集約
 - process: argv、Python 版、起動時の環境変数（値は引数と同じ規則）
-
-判断はしない。gate が record の宣言と照合する。
 """
 
 import atexit
@@ -45,14 +43,6 @@ _OUT_DIR = os.environ.get("AIRAS_OBSERVE_DIR")
 _SELF = os.path.abspath(__file__)
 _CWD = os.getcwd()
 _EXPERIMENT_CODE = os.path.join(_CWD, "src") + os.sep
-_INTEGRATION = json.loads(os.environ.get("AIRAS_OBSERVE_INTEGRATION") or "{}")
-_ENTRY = _INTEGRATION.get("method_entry", "")
-# argument は module.Class.method.arg なので、最後の arg を落とした関数を観測する
-_COMPONENTS = {
-    _ENTRY,
-    *(a.rsplit(".", 1)[0] for a in _INTEGRATION.get("arguments", [])),
-} - {""}
-_PACKAGES = {_ENTRY.split(".")[0]} if _ENTRY else set()
 _STDLIB = tuple(
     {sysconfig.get_paths()["stdlib"], sysconfig.get_paths()["platstdlib"]}
 )
@@ -70,7 +60,7 @@ _SECRET_NAME = re.compile(
 # ponytail: 既知の鍵の接頭辞だけ。新しいプロバイダが出たら足す
 _KEY_LIKE = re.compile(r"(sk-|ghp_|gho_|github_pat_|hf_|AKIA|eyJ|xox[abp]-|AIza|glpat-)\S{10,}")
 _OMITTED = ("NotGiven", "NotGivenType", "Sentinel")  # 省略の印は値ではない
-_SAMPLES, _VALUES, _DISTINCT = 3, 50, 1000
+_SAMPLES, _VALUES, _DISTINCT, _SMALL = 3, 50, 1000, 20
 
 
 def _secret_names() -> set[str]:
@@ -95,7 +85,7 @@ _SECRET_VALUES = {
     os.environ[n]: n for n in _SECRET_NAMES if len(os.environ.get(n, "")) >= 8
 }
 
-_kind: dict[types.CodeType, str] = {}  # code → "declared" | "src" | "dep" | ""（見ない）
+_kind: dict[types.CodeType, str] = {}  # code → "src" | "dep" | ""（見ない）
 _src_hashes: dict[str, str | None] = {}  # 実験コードの相対パス → import 時の sha256
 _first_lasti: dict[types.CodeType, int] = {}
 _active: dict[int, dict] = {}  # 戻り値を待つ sample
@@ -128,6 +118,11 @@ def _is_stdlib(file: str) -> bool:
     )
 
 
+def _relative(file: str) -> str:
+    """実験コードは cwd からの相対パスで。gate は "src/" で見る"""
+    return os.path.relpath(file, _CWD) if file.startswith(_CWD + os.sep) else file
+
+
 def _to_json_value(v, name=""):
     """name は引数名か環境変数名。秘密の名前の値と、秘密の値を含む文字列は伏せる"""
     if v is None or isinstance(v, (bool, int, float)):
@@ -150,6 +145,15 @@ def _to_json_value(v, name=""):
     if len(r) <= 200 and not _KEY_LIKE.search(r):
         return {"type": type(v).__name__, "repr": r}
     return {"type": type(v).__name__, "len": len(r), "sha256": _sha(r.encode())}
+
+
+def _value(v, name: str):
+    """集計に使う値。中身を見るのはスカラー・文字列・小さいコンテナまで。大きい配列の repr は取らない"""
+    if v is None or isinstance(v, (bool, int, float, str)):
+        return _to_json_value(v, name)
+    if isinstance(v, (list, tuple, dict, set, frozenset)) and len(v) <= _SMALL:
+        return _to_json_value(v, name)
+    return {"type": type(v).__name__}
 
 
 def _where():
@@ -175,12 +179,9 @@ def _where():
     return caller, None, False
 
 
-def _classify(frame, code) -> str:
+def _classify(code) -> str:
     if code.co_name.startswith("<") or not code.co_flags & 0x02:  # lambda、内包表記、クラス本体
         return ""
-    qualname = f"{frame.f_globals.get('__name__', '')}.{getattr(code, 'co_qualname', code.co_name)}"
-    if qualname in _COMPONENTS:
-        return "declared"
     file = code.co_filename
     if file.startswith(_EXPERIMENT_CODE):
         return "src"
@@ -189,8 +190,8 @@ def _classify(frame, code) -> str:
     return "dep"
 
 
-def _note(a: dict, v, name: str, full: bool) -> None:
-    """引数 1 つの集計。full なら値を全部記録、そうでなければスカラーと文字列だけ"""
+def _note(a: dict, v, name: str) -> None:
+    """引数 1 つの集計"""
     a["calls"] += 1
     t = type(v).__name__
     a["types"][t] = a["types"].get(t, 0) + 1
@@ -204,10 +205,7 @@ def _note(a: dict, v, name: str, full: bool) -> None:
             a["length_max"] = n if "length_max" not in a else max(a["length_max"], n)
         except Exception:
             pass
-    if full or v is None or isinstance(v, (bool, int, float, str)):
-        rec = _to_json_value(v, name)
-    else:
-        rec = {"type": type(v).__name__}
+    rec = _value(v, name)
     key = json.dumps(rec, sort_keys=True, ensure_ascii=False)
     if key in a["values"]:
         a["values"][key]["calls"] += 1
@@ -226,8 +224,8 @@ def _profile(frame, event, arg):
             if kind is None:
                 file = code.co_filename
                 if file.startswith(_EXPERIMENT_CODE):  # 初見 = import 直後。今の内容が走った内容
-                    _src_hashes.setdefault(os.path.relpath(file, _CWD), _file_sha(file))
-                kind = _kind[code] = _classify(frame, code)
+                    _src_hashes.setdefault(_relative(file), _file_sha(file))
+                kind = _kind[code] = _classify(code)
             if not kind:
                 return
             if kind == "dep":  # 依存は実験コードから直接呼ばれたときだけ
@@ -248,7 +246,6 @@ def _profile(frame, event, arg):
                 fn = _fns[name] = {"calls": 0, "args": {}, "samples": []}
             fn["calls"] += 1
             sampling = len(fn["samples"]) < _SAMPLES
-            full = sampling or kind == "declared"
             n = code.co_argcount + code.co_kwonlyargcount
             names = list(code.co_varnames[:n])
             if code.co_flags & 0x04:
@@ -267,7 +264,7 @@ def _profile(frame, event, arg):
                 a = fn["args"].get(k)
                 if a is None:
                     a = fn["args"][k] = {"calls": 0, "types": {}, "values": {}}
-                _note(a, v, k, full)
+                _note(a, v, k)
                 if sampling:
                     sample[k] = _to_json_value(v, k)
             if sampling:
@@ -373,35 +370,64 @@ def _reset_after_fork():
     _errors.clear()
 
 
-def _origin(fn) -> dict:
-    file = fn.__code__.co_filename
-    if file.startswith(_CWD + os.sep):  # 実験コードは cwd からの相対パスで。gate は "src/" で見る
-        file = os.path.relpath(file, _CWD)
-    return {"module": fn.__module__, "file": file}
+def _from_experiment(file: str) -> bool:
+    """定義元が実験コードか exec か"""
+    return file.startswith(_EXPERIMENT_CODE) or file.startswith("<string>")
 
 
-def _ours(module: str | None, file: str | None) -> bool:
-    """監視 package で定義されたもの、または実験コード（差し替え）で定義されたものか。
-    import してきた stdlib や他 package の名前は記録しない。exec で作った関数は
-    module が None"""
-    return (
-        (module or "").split(".")[0] in _PACKAGES
-        or module == "__main__"
-        or bool(file and file.startswith(_EXPERIMENT_CODE))
-    )
+def _dependency_file(cls) -> str | None:
+    """stdlib でも実験コードでもないモジュールで定義されたクラスなら、そのモジュールのファイル"""
+    file = getattr(sys.modules.get(cls.__module__), "__file__", None)
+    if file and not _is_stdlib(file) and not file.startswith(_EXPERIMENT_CODE):
+        return file
+    return None
 
 
-def _upstream_extensions() -> dict:
-    """実験コード（src/ と __main__）で定義されたクラスのうち、上流クラスを継承するもの"""
+def _definitions():
+    """(loaded_file_hashes, redefinitions)。実験コード以外の全モジュールを見る"""
+    hashes, redefined = {}, {}
+    for name, mod in list(sys.modules.items()):
+        file = getattr(mod, "__file__", None)
+        if not file or file.startswith(_EXPERIMENT_CODE):
+            continue
+        if not _is_stdlib(file):
+            hashes[name] = {"file": file, "sha256": _file_sha(file)}
+        for attr, obj in list(vars(mod).items()):
+            if attr.startswith("__"):
+                continue
+            try:
+                if isinstance(obj, types.FunctionType):
+                    if _from_experiment(obj.__code__.co_filename):
+                        redefined[f"{name}.{attr}"] = _relative(obj.__code__.co_filename)
+                elif isinstance(obj, type):
+                    defined_in = getattr(sys.modules.get(obj.__module__), "__file__", None) or ""
+                    if defined_in.startswith(_EXPERIMENT_CODE):  # 依存のクラスを実験コードのクラスで差し替え
+                        redefined[f"{name}.{attr}"] = _relative(defined_in)
+                    elif obj.__module__ == name:  # import したクラスは定義元のモジュールで見る
+                        for member, value in list(vars(obj).items()):
+                            if isinstance(value, (staticmethod, classmethod)):
+                                value = value.__func__
+                            if not isinstance(value, types.FunctionType) or member.startswith("__"):
+                                continue  # dataclass 等が生成する dunder は数えない
+                            if _from_experiment(value.__code__.co_filename):
+                                redefined[f"{name}.{attr}.{member}"] = _relative(value.__code__.co_filename)
+            except Exception as e:  # 1 つの属性の不具合で記録全体を失わない
+                if len(_errors) < 100:
+                    _errors.append(f"definitions {name}.{attr}: {e!r}")
+    return hashes, redefined
+
+
+def _extensions() -> dict:
+    """実験コードで定義されたクラスのうち、stdlib 以外のクラスを継承するもの"""
     found = {}
     for name, mod in list(sys.modules.items()):
         file = getattr(mod, "__file__", None)
-        if not (name == "__main__" or (file and file.startswith(_EXPERIMENT_CODE))):
+        if not (file and file.startswith(_EXPERIMENT_CODE)):
             continue
         for attr, obj in list(vars(mod).items()):
             if not (isinstance(obj, type) and obj.__module__ == name):
                 continue
-            bases = [b for b in obj.__mro__[1:] if b.__module__.split(".")[0] in _PACKAGES]
+            bases = [b for b in obj.__mro__[1:] if _dependency_file(b)]
             if bases:
                 found[f"{name}.{attr}"] = {
                     "bases": [f"{b.__module__}.{b.__qualname__}" for b in bases],
@@ -417,77 +443,11 @@ def _upstream_extensions() -> dict:
     return found
 
 
-def _definitions():
-    """(loaded_file_hashes, loaded_definitions, foreign_definitions)"""
-    mods, syms, foreign = {}, {}, {}
-    for name, mod in list(sys.modules.items()):
-        file = getattr(mod, "__file__", None)
-        if not file or file.startswith(_EXPERIMENT_CODE):  # 実験コードは _src_hashes に
-            continue
-        upstream = name.split(".")[0] in _PACKAGES
-        if upstream:
-            entry = {"file": file, "sha256": _file_sha(file)}
-            cached = getattr(mod, "__cached__", None)
-            if cached and os.path.exists(cached):
-                entry["cached"] = {"file": cached, "sha256": _file_sha(cached)}
-            mods[name] = entry
-        table = {}
-        for attr, obj in list(vars(mod).items()):
-            if attr.startswith("__"):
-                continue
-            try:
-                owner = getattr(obj, "__module__", None) or ""
-                # package 内の別モジュールで定義されたものの再 export は、定義元で記録する
-                if owner != name and owner.split(".")[0] in _PACKAGES:
-                    continue
-                if isinstance(obj, types.FunctionType):
-                    f = obj.__code__.co_filename
-                    if upstream:
-                        # exec で作った関数（定義元 "<string>"）は出自不明なので残す。stdlib の "<frozen …>" は対象外
-                        if _ours(obj.__module__, f) or f.startswith("<string>"):
-                            table[attr] = _origin(obj)
-                    elif f.startswith(_EXPERIMENT_CODE):
-                        foreign[f"{name}.{attr}"] = os.path.relpath(f, _CWD)
-                elif isinstance(obj, type):
-                    defining = sys.modules.get(owner)
-                    own = owner == name or _ours(owner, getattr(defining, "__file__", None))
-                    if not own:  # import したクラスは定義元のモジュールで見る
-                        continue
-                    if upstream:
-                        table[attr] = {"module": owner}
-                    else:
-                        source = getattr(defining, "__file__", None) or ""
-                        if source.startswith(_EXPERIMENT_CODE):  # 依存のクラスを src のクラスで差し替え
-                            foreign[f"{name}.{attr}"] = os.path.relpath(source, _CWD)
-                    for member, value in list(vars(obj).items()):
-                        if isinstance(value, (staticmethod, classmethod)):
-                            value = value.__func__
-                        if not isinstance(value, types.FunctionType):
-                            continue
-                        f = value.__code__.co_filename
-                        # dataclass 等が生成した dunder（co_filename "<string>"）は記録しないが、
-                        # 通常名のメソッドが "<string>" なら exec による差し替えの疑いがあるので残す
-                        generated = f.startswith("<string>")
-                        if generated and member.startswith("__"):
-                            continue
-                        if upstream:
-                            if generated or _ours(value.__module__, f):
-                                table[f"{attr}.{member}"] = _origin(value)
-                        elif f.startswith(_EXPERIMENT_CODE):
-                            foreign[f"{name}.{attr}.{member}"] = os.path.relpath(f, _CWD)
-            except Exception as e:  # 1 つの属性の不具合で記録全体を失わない
-                if len(_errors) < 100:
-                    _errors.append(f"definitions {name}.{attr}: {e!r}")
-        if upstream:
-            syms[name] = table
-    return mods, syms, foreign
-
-
 def _finish():
-    mods, syms, foreign = _definitions()
+    hashes, redefined = _definitions()
     out = {
         "version": 2,
-        "hook": {"sha256": _file_sha(_SELF)},  # 誰が観察したか。宣言は record
+        "hook": {"sha256": _file_sha(_SELF)},  # 誰が観察したか
         "process": {
             "pid": os.getpid(),
             "ppid": os.getppid(),
@@ -499,10 +459,9 @@ def _finish():
             "ended": time.time(),
         },
         "src_modules": dict(_src_hashes),
-        "loaded_file_hashes": mods,
-        "loaded_definitions": syms,
-        "foreign_definitions": foreign,
-        "upstream_extensions": _upstream_extensions(),
+        "loaded_file_hashes": hashes,
+        "redefinitions": redefined,
+        "extensions": _extensions(),
         "calls": _fns,
         "reaches": {
             "opens": _opens,
@@ -527,37 +486,6 @@ def install() -> None:
     threading.setprofile(_profile)
     os.register_at_fork(after_in_child=_reset_after_fork)
     atexit.register(_finish)
-
-
-def integration(run_id: str) -> dict:
-    """run_id の design の repository_integration から、フックが観測するもの: 走らせる
-    リポジトリ（s1.r1）の method_entry と各 argument。凍結前は design.json（id は並び順
-    s1, s2, … / r1, r2, …）、凍結後は record。record は追記式なので最後の宣言が生きる"""
-    found = {}
-    for path in (".research/design.json", ".research/record.json"):
-        if not os.path.exists(path):
-            continue
-        doc = json.load(open(path))
-        repositories = {}
-        for i, s in enumerate(doc.get("literature", [])):
-            sid = s.get("id", f"s{i + 1}")
-            for j, r in enumerate(s.get("repositories", [])):
-                repositories[r.get("id", f"{sid}.r{j + 1}")] = r
-        for h in doc.get("hypotheses", []):
-            for c in h.get("claims", []):
-                for d in c.get("designs", []):
-                    if not any(r.get("run_id") == run_id for r in d.get("runs", [])):
-                        continue
-                    integration = d.get("repository_integration")
-                    if not integration:  # 最新の宣言に統合が無ければ観測対象なし
-                        found = {}
-                        continue
-                    repository = repositories.get(integration.get("repository_id"), {})
-                    found = {
-                        "method_entry": repository.get("method_entry", ""),
-                        "arguments": [a["argument"] for a in integration.get("arguments", [])],
-                    }
-    return found
 
 
 def _add(dst: dict, src: dict) -> None:
@@ -615,10 +543,7 @@ def merge(d: str, run_id: str, out: str) -> None:
         json.dump(merged, f, ensure_ascii=False, separators=(",", ":"))
 
 
-if __name__ == "__main__":
-    if sys.argv[1] == "integration":  # python3 sitecustomize.py integration <run_id>
-        print(json.dumps(integration(sys.argv[2])))
-    else:  # python3 sitecustomize.py merge <dir> <run_id> <out>
-        merge(*sys.argv[2:])
+if __name__ == "__main__":  # python3 sitecustomize.py merge <dir> <run_id> <out>
+    merge(*sys.argv[2:])
 elif _OUT_DIR:
     install()

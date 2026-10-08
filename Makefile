@@ -72,15 +72,11 @@ run: _require_run_id
 ## process it starts records what it called, loaded and reached (see that file).
 ## The per-process records are merged into results/<run_id>/observed.json after
 ## the agent's process has exited; the gate compares them with the record's
-## declarations. What to watch comes from the record too: the
-## `repository_integration` of the design that declares the run
-## (`.research/design.json` before the freeze) names the method's entry (the
-## source repository's `method_entry`) and the functions whose arguments it sets.
+## declarations. The hook itself reads no declaration, so what it records does
+## not depend on what was declared.
 run-experiment: _require_run_id
 	@obs=$$(mktemp -d); status=0; \
-	spec=$$(python3 .airas/sitecustomize.py integration "$$RUN_ID") || exit 1; \
-	PYTHONPATH="$(abspath .airas)$${PYTHONPATH:+:$$PYTHONPATH}" \
-	AIRAS_OBSERVE_DIR="$$obs" AIRAS_OBSERVE_INTEGRATION="$$spec" \
+	PYTHONPATH="$(abspath .airas)$${PYTHONPATH:+:$$PYTHONPATH}" AIRAS_OBSERVE_DIR="$$obs" \
 	uv run python -u -m src.main run=$$RUN_ID results_dir="$$RESULTS_DIR" mode=$$MODE || status=$$?; \
 	mkdir -p "$$RESULTS_DIR/$$RUN_ID"; \
 	python3 .airas/sitecustomize.py merge "$$obs" "$$RUN_ID" "$$RESULTS_DIR/$$RUN_ID/observed.json" \
