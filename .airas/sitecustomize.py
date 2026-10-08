@@ -6,7 +6,7 @@ AIRAS_OBSERVE_DIR/<pid>-<開始時刻>.json へ書き、Makefile が `merge` で
 record の宣言は読まない。観測の範囲が宣言で狭まらないためで、何を宣言と比べるかは gate が決める。
 
 - calls: 関数ごとに 1 項目。対象は実験コード（src/）で定義された関数と、実験コードから直接
-  呼ばれた依存の関数（stdlib と、依存同士の呼び出しは除く）。項目は呼び出し回数、引数ごとの
+  呼ばれた依存の関数（stdlib、依存同士の呼び出し、`_` で始まる内部名は除く。`__init__` と `__call__` は見る）。項目は呼び出し回数、引数ごとの
   「取った値 → 回数」（回数の多い 50 値。異なり数は 1000 まで数え、そこまでは回数も正確。
   数値は min/max、長さのあるものは length_min/max）、先頭 3 回の全引数と戻り値。
   値はスカラー・文字列・要素 20 個以下のコンテナなら中身（200 文字超は型・長さ・sha256。
@@ -16,14 +16,16 @@ record の宣言は読まない。観測の範囲が宣言で狭まらないた�
   （Actions secrets の一覧。ローカルでは ~/.airas/credentials.json のキー）の環境変数から集める
 - src_modules: 実験コードの各ファイルの sha256。そのコードが初めて走った時（import 直後）に
   読むので、後からの書き換えは入らない（.pyc は見ない）。gate が実行コミットの同じファイルと比べる
-- loaded_file_hashes: import された stdlib 以外の全モジュールのファイルの sha256。gate が record の
-  リポジトリのスナップショットと比べ、上流が原本のまま走ったかを見る
-- redefinitions: 依存（上流を含む）の名前空間にある名前のうち、定義元が実験コードか exec のもの。
+- loaded_file_hashes: uv.lock が守らないモジュールのファイルの sha256。守られているのは、lock に
+  index（registry）由来として同じ版で載っている配布物だけ。git / URL / ローカル由来、lock に無い
+  追加 install、PYTHONPATH に乗せた clone は全部 hash する。gate が record のリポジトリの
+  スナップショットと比べ、上流が原本のまま走ったかを見る
+- redefinitions: 依存（上流を含む）の名前空間にある名前のうち、定義元が実験コードのもの。
   monkeypatch とクラスの差し替え
 - extensions: 実験コードのクラスのうち stdlib 以外のクラスを継承するもの。基底と override したメソッド名
 - reaches: 実験コードが起点の open（インタプリタと依存の配下は除く。一時ディレクトリはディレクトリに
   畳む）、connect、名前解決、実験コードが起動した（または python の）子プロセス、実験コードによる
-  環境変数の変更、このフックを外す操作。回数で集約
+  環境変数の変更、実験コードが直接呼んだ exec / eval、このフックを外す操作。回数で集約
 - process: argv、Python 版、起動時の環境変数（値は引数と同じ規則）
 """
 
@@ -59,7 +61,7 @@ _SECRET_NAME = re.compile(
 )
 # ponytail: 既知の鍵の接頭辞だけ。新しいプロバイダが出たら足す
 _KEY_LIKE = re.compile(r"(sk-|ghp_|gho_|github_pat_|hf_|AKIA|eyJ|xox[abp]-|AIza|glpat-)\S{10,}")
-_OMITTED = ("NotGiven", "NotGivenType", "Sentinel")  # 省略の印は値ではない
+_OMITTED = ("NotGiven", "NotGivenType", "Sentinel", "_NoValueType")  # 省略の印は値ではない
 _SAMPLES, _VALUES, _DISTINCT, _SMALL = 3, 50, 1000, 20
 
 
@@ -95,6 +97,7 @@ _connects: dict[str, int] = {}
 _lookups: dict[str, int] = {}
 _spawns: dict[str, dict] = {}
 _env_changes: dict[str, int] = {}
+_execs: dict[str, int] = {}
 _tamper: list[dict] = []
 _errors: list[str] = []
 _started = time.time()
@@ -187,6 +190,8 @@ def _classify(code) -> str:
         return "src"
     if _is_stdlib(file) or file == _SELF:
         return ""
+    if code.co_name.startswith("_") and code.co_name not in ("__init__", "__call__"):
+        return ""  # 依存の内部名（numpy の _dispatcher など）
     return "dep"
 
 
@@ -343,6 +348,12 @@ def _audit(event, args):
                 rec["n"] += 1
             if event == "os.exec":  # 成功すると atexit が走らないので今書く
                 _finish()
+        elif event == "compile" and str(args[1]).startswith("<"):
+            # 文字列からの exec / eval / compile（ファイル名が "<string>" など）。ファイルの import は見ない。
+            # 実験コードの行が直接呼んだものだけ。dataclass が生成する __init__ は stdlib が呼ぶので入らない
+            caller, code, _ = _where()
+            if code and (caller or "").startswith(_EXPERIMENT_CODE):
+                _execs[code] = _execs.get(code, 0) + 1
         elif event in ("os.putenv", "os.unsetenv"):
             caller, code, direct = _where()
             if direct:  # 依存が自分の都合で触る OPENBLAS_* などは見ない
@@ -364,15 +375,41 @@ _HOOK_CODES = {_where.__code__, _profile.__code__, _audit.__code__}
 
 
 def _reset_after_fork():
-    for c in (_fns, _active, _opens, _connects, _lookups, _spawns, _env_changes):
+    for c in (_fns, _active, _opens, _connects, _lookups, _spawns, _env_changes, _execs):
         c.clear()
     _tamper.clear()
     _errors.clear()
 
 
 def _from_experiment(file: str) -> bool:
-    """定義元が実験コードか exec か"""
-    return file.startswith(_EXPERIMENT_CODE) or file.startswith("<string>")
+    return file.startswith(_EXPERIMENT_CODE)
+
+
+def _locked_modules() -> set[str]:
+    """uv.lock の hash が守る最上位モジュール名: index（registry）由来として lock に載り、
+    入っている版も同じ配布物のもの。lock が無ければ空（= 全部 hash する）"""
+    import importlib.metadata as metadata
+    import tomllib
+
+    def norm(name: str) -> str:
+        return re.sub(r"[-_.]+", "-", name).lower()
+
+    found: set[str] = set()
+    try:
+        with open(os.path.join(_CWD, "uv.lock"), "rb") as f:
+            lock = tomllib.load(f)
+        locked = {
+            (norm(pkg["name"]), pkg.get("version"))
+            for pkg in lock.get("package", [])
+            if "registry" in pkg.get("source", {})
+        }
+        for module, dists in metadata.packages_distributions().items():
+            if any((norm(d), metadata.version(d)) in locked for d in dists):
+                found.add(module)
+    except Exception as e:  # lock や metadata が読めなければ守られていない扱い
+        if len(_errors) < 100:
+            _errors.append(f"lock: {e!r}")
+    return found
 
 
 def _dependency_file(cls) -> str | None:
@@ -386,11 +423,12 @@ def _dependency_file(cls) -> str | None:
 def _definitions():
     """(loaded_file_hashes, redefinitions)。実験コード以外の全モジュールを見る"""
     hashes, redefined = {}, {}
+    locked = _locked_modules()
     for name, mod in list(sys.modules.items()):
         file = getattr(mod, "__file__", None)
-        if not file or file.startswith(_EXPERIMENT_CODE):
+        if not file or file.startswith(_EXPERIMENT_CODE) or file == _SELF:
             continue
-        if not _is_stdlib(file):
+        if not _is_stdlib(file) and name.split(".")[0] not in locked:
             hashes[name] = {"file": file, "sha256": _file_sha(file)}
         for attr, obj in list(vars(mod).items()):
             if attr.startswith("__"):
@@ -411,9 +449,8 @@ def _definitions():
                                 continue  # dataclass 等が生成する dunder は数えない
                             if _from_experiment(value.__code__.co_filename):
                                 redefined[f"{name}.{attr}.{member}"] = _relative(value.__code__.co_filename)
-            except Exception as e:  # 1 つの属性の不具合で記録全体を失わない
-                if len(_errors) < 100:
-                    _errors.append(f"definitions {name}.{attr}: {e!r}")
+            except Exception:  # 触ると import を試みる遅延 proxy などは飛ばす
+                continue
     return hashes, redefined
 
 
@@ -422,8 +459,8 @@ def _extensions() -> dict:
     found = {}
     for name, mod in list(sys.modules.items()):
         file = getattr(mod, "__file__", None)
-        if not (file and file.startswith(_EXPERIMENT_CODE)):
-            continue
+        if not (file and file.startswith(_EXPERIMENT_CODE)) or name == "__mp_main__":
+            continue  # __mp_main__ は multiprocessing が読み直した __main__ の写し
         for attr, obj in list(vars(mod).items()):
             if not (isinstance(obj, type) and obj.__module__ == name):
                 continue
@@ -469,6 +506,7 @@ def _finish():
             "getaddrinfo": _lookups,
             "spawns": _spawns,
             "env_changes": _env_changes,
+            "execs": _execs,
             "tamper": _tamper,
         },
         "errors": _errors,
