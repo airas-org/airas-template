@@ -1,38 +1,29 @@
 """`make run` が起動した Python プロセスの実行記録（version 2）。
 
 Makefile が PYTHONPATH にこのディレクトリを足すので、Python はどのコードより先に
-このファイルを import する。AIRAS_OBSERVE_DIR が無ければ何もしない。
+このファイルを import する。AIRAS_OBSERVE_DIR が無ければ何もしない。終了時に
+AIRAS_OBSERVE_DIR/<pid>-<開始時刻>.json へ書き、Makefile が `merge` で observed.json に結合する。
 
-終了時に AIRAS_OBSERVE_DIR/<pid>-<開始時刻>.json へ書き、Makefile が `merge` で
-observed.json に結合する。
-
-- calls:   関数ごとに 1 項目。対象は、実験コード（src/）で定義された関数、実験コードから
-           直接呼ばれた依存の関数（stdlib と、依存同士の呼び出しは除く）、宣言された関数
-           （AIRAS_OBSERVE_INTEGRATION: run の design の repository_integration から、走らせる
-           リポジトリの method_entry と、値を宣言した各 argument の関数。Makefile が
-           `sitecustomize.py integration <run_id>` で引く）。
-           項目は呼び出し回数、引数ごとの「取った値 → 回数」（異なり値 50 まで、異なり数は
-           1000 まで数える。数値は min/max、長さのあるものは length_min/max）、先頭 3 回の
-           全引数と戻り値。宣言された関数は全呼び出しで値を記録し、それ以外は 4 回目から
-           スカラーと文字列だけ値を見て、他は型と長さだけ見る。
-           値は平文（200 文字超は型・長さ・sha256。メモリアドレス入りの repr は型だけ）。
-           秘密の値を含む文字列は `{"redacted": <環境変数名>, "len": n}` に、鍵の形の文字列
-           （sk- / ghp_ / hf_ / AKIA / JWT など）は sha256 に置き換える。秘密の値は、基盤が
-           AIRAS_SECRET_NAMES で渡す名前（Actions secrets の一覧。ローカルでは
-           ~/.airas/credentials.json のキー）の環境変数から集める
-- src_modules: import された実験コードの各ファイルの sha256。gate が実行コミットの同じ
-           ファイルと比べ、読まれたコードがコミットのものかを見る
-- loaded_file_hashes: import された上流パッケージ（method_entry のパッケージ）の各ファイルの
-           sha256。record のスナップショットと比べ、原本のまま走ったかを見る
-- loaded_definitions: 上流の各クラス・関数・メソッドの定義元。monkeypatch は定義元が
-           実験コード（src/）になり、exec で作ったものは "<string>" になる
-- foreign_definitions: 上流以外の依存（scipy、pathlib、…）の名前のうち定義元が実験コードの
-           もの。依存の差し替え
-- upstream_extensions: 実験コードで定義されたクラスのうち上流クラスを継承するもの。
-           基底と、基底にもあるメソッド名（override）
-- reaches: 実験コードが起点の open（インタプリタと依存の配下は除く。一時ディレクトリは
-           ディレクトリに畳む）、connect、名前解決、実験コードが起動した（または python の）
-           子プロセス、実験コードによる環境変数の変更、このフックを外す操作。回数で集約
+- calls: 関数ごとに 1 項目。対象は実験コード（src/）で定義された関数、実験コードから直接
+  呼ばれた依存の関数（stdlib と依存同士の呼び出しは除く）、宣言された関数（AIRAS_OBSERVE_INTEGRATION:
+  run の design の repository_integration の method_entry と各 argument の関数。Makefile が
+  `sitecustomize.py integration <run_id>` で引く）。項目は呼び出し回数、引数ごとの
+  「取った値 → 回数」（回数の多い 50 値。異なり数は 1000 まで数え、そこまでは回数も正確。
+  数値は min/max、長さのあるものは length_min/max）、先頭 3 回の全引数と戻り値。宣言された関数は
+  全呼び出しで値を記録し、それ以外は 4 回目からスカラーと文字列だけ値を見て、他は型と長さだけ見る。
+  値は平文（200 文字超は型・長さ・sha256。メモリアドレス入りの repr は型だけ）。秘密の値を含む
+  文字列は `{"redacted": <環境変数名>, "len": n}` に、鍵の形（sk- / ghp_ / hf_ / AKIA / JWT …）は
+  sha256 に置き換える。秘密の値は、基盤が AIRAS_SECRET_NAMES で渡す名前（Actions secrets の一覧。
+  ローカルでは ~/.airas/credentials.json のキー）の環境変数から集める
+- src_modules: 実験コードの各ファイルの sha256。そのコードが初めて走った時（import 直後）に読むので
+  後からの書き換えは入らない（.pyc は見ない）。gate が実行コミットの同じファイルと比べる
+- loaded_file_hashes / loaded_definitions: 上流パッケージ（method_entry のパッケージ）の各ファイルの
+  sha256 と、各名前の定義元。monkeypatch は定義元が src/ に、exec で作ったものは "<string>" になる
+- foreign_definitions: 上流以外の依存の名前のうち定義元が実験コードのもの（差し替え）
+- upstream_extensions: 実験コードのクラスのうち上流クラスを継承するもの。基底と override したメソッド名
+- reaches: 実験コードが起点の open（インタプリタと依存の配下は除く。一時ディレクトリはディレクトリに
+  畳む）、connect、名前解決、実験コードが起動した（または python の）子プロセス、実験コードによる
+  環境変数の変更、このフックを外す操作。回数で集約
 - process: argv、Python 版、起動時の環境変数（値は引数と同じ規則）
 
 判断はしない。gate が record の宣言と照合する。
@@ -105,6 +96,7 @@ _SECRET_VALUES = {
 }
 
 _kind: dict[types.CodeType, str] = {}  # code → "declared" | "src" | "dep" | ""（見ない）
+_src_hashes: dict[str, str | None] = {}  # 実験コードの相対パス → import 時の sha256
 _first_lasti: dict[types.CodeType, int] = {}
 _active: dict[int, dict] = {}  # 戻り値を待つ sample
 _fns: dict[str, dict] = {}
@@ -155,7 +147,7 @@ def _to_json_value(v, name=""):
         return {"type": "str", "len": len(v), "sha256": _sha(v.encode())}
     if " at 0x" in r:  # メモリアドレスは再現不能なので型だけ
         return {"type": type(v).__name__}
-    if len(r) <= 200:
+    if len(r) <= 200 and not _KEY_LIKE.search(r):
         return {"type": type(v).__name__, "repr": r}
     return {"type": type(v).__name__, "len": len(r), "sha256": _sha(r.encode())}
 
@@ -200,7 +192,8 @@ def _classify(frame, code) -> str:
 def _note(a: dict, v, name: str, full: bool) -> None:
     """引数 1 つの集計。full なら値を全部記録、そうでなければスカラーと文字列だけ"""
     a["calls"] += 1
-    a["types"].add(type(v).__name__)
+    t = type(v).__name__
+    a["types"][t] = a["types"].get(t, 0) + 1
     if isinstance(v, (int, float)) and not isinstance(v, bool):
         a["min"] = v if "min" not in a else min(a["min"], v)
         a["max"] = v if "max" not in a else max(a["max"], v)
@@ -217,11 +210,9 @@ def _note(a: dict, v, name: str, full: bool) -> None:
         rec = {"type": type(v).__name__}
     key = json.dumps(rec, sort_keys=True, ensure_ascii=False)
     if key in a["values"]:
-        a["values"][key][1] += 1
-    elif len(a["values"]) < _VALUES:
-        a["values"][key] = [rec, 1]
-    if len(a["seen"]) < _DISTINCT:
-        a["seen"].add(key)
+        a["values"][key]["calls"] += 1
+    elif len(a["values"]) < _DISTINCT:
+        a["values"][key] = {"value": rec, "calls": 1}
 
 
 def _profile(frame, event, arg):
@@ -233,6 +224,9 @@ def _profile(frame, event, arg):
         if event == "call":
             kind = _kind.get(code)
             if kind is None:
+                file = code.co_filename
+                if file.startswith(_EXPERIMENT_CODE):  # 初見 = import 直後。今の内容が走った内容
+                    _src_hashes.setdefault(os.path.relpath(file, _CWD), _file_sha(file))
                 kind = _kind[code] = _classify(frame, code)
             if not kind:
                 return
@@ -272,7 +266,7 @@ def _profile(frame, event, arg):
                     continue
                 a = fn["args"].get(k)
                 if a is None:
-                    a = fn["args"][k] = {"calls": 0, "types": set(), "values": {}, "seen": set()}
+                    a = fn["args"][k] = {"calls": 0, "types": {}, "values": {}}
                 _note(a, v, k, full)
                 if sampling:
                     sample[k] = _to_json_value(v, k)
@@ -424,14 +418,11 @@ def _upstream_extensions() -> dict:
 
 
 def _definitions():
-    """(src_modules, loaded_file_hashes, loaded_definitions, foreign_definitions)"""
-    src_mods, mods, syms, foreign = {}, {}, {}, {}
+    """(loaded_file_hashes, loaded_definitions, foreign_definitions)"""
+    mods, syms, foreign = {}, {}, {}
     for name, mod in list(sys.modules.items()):
         file = getattr(mod, "__file__", None)
-        if not file:
-            continue
-        if file.startswith(_EXPERIMENT_CODE):
-            src_mods[os.path.relpath(file, _CWD)] = _file_sha(file)
+        if not file or file.startswith(_EXPERIMENT_CODE):  # 実験コードは _src_hashes に
             continue
         upstream = name.split(".")[0] in _PACKAGES
         if upstream:
@@ -464,6 +455,10 @@ def _definitions():
                         continue
                     if upstream:
                         table[attr] = {"module": owner}
+                    else:
+                        source = getattr(defining, "__file__", None) or ""
+                        if source.startswith(_EXPERIMENT_CODE):  # 依存のクラスを src のクラスで差し替え
+                            foreign[f"{name}.{attr}"] = os.path.relpath(source, _CWD)
                     for member, value in list(vars(obj).items()):
                         if isinstance(value, (staticmethod, classmethod)):
                             value = value.__func__
@@ -485,26 +480,11 @@ def _definitions():
                     _errors.append(f"definitions {name}.{attr}: {e!r}")
         if upstream:
             syms[name] = table
-    return src_mods, mods, syms, foreign
+    return mods, syms, foreign
 
 
 def _finish():
-    src_mods, mods, syms, foreign = _definitions()
-    calls = {}
-    for name, fn in _fns.items():
-        calls[name] = {
-            "calls": fn["calls"],
-            "args": {
-                k: {
-                    **{kk: vv for kk, vv in a.items() if kk not in ("types", "values", "seen")},
-                    "types": sorted(a["types"]),
-                    "values": list(a["values"].values()),
-                    "seen": sorted(a["seen"]),
-                }
-                for k, a in fn["args"].items()
-            },
-            "samples": fn["samples"],
-        }
+    mods, syms, foreign = _definitions()
     out = {
         "version": 2,
         "hook": {"sha256": _file_sha(_SELF)},  # 誰が観察したか。宣言は record
@@ -518,17 +498,17 @@ def _finish():
             "started": _started,
             "ended": time.time(),
         },
-        "src_modules": src_mods,
+        "src_modules": dict(_src_hashes),
         "loaded_file_hashes": mods,
         "loaded_definitions": syms,
         "foreign_definitions": foreign,
         "upstream_extensions": _upstream_extensions(),
-        "calls": calls,
+        "calls": _fns,
         "reaches": {
             "opens": _opens,
             "connects": _connects,
             "getaddrinfo": _lookups,
-            "spawns": list(_spawns.values()),
+            "spawns": _spawns,
             "env_changes": _env_changes,
             "tamper": _tamper,
         },
@@ -580,124 +560,57 @@ def integration(run_id: str) -> dict:
     return found
 
 
-def _union(dst: dict, src: dict, path: str, errors: list) -> None:
-    """dict の木を結合する。同じ鍵に違う値があれば先勝ちで、errors に残す"""
+def _add(dst: dict, src: dict) -> None:
+    """記録を足す。回数は和、min/max はその通り、辞書は再帰、samples と tamper は連結、他は先勝ち"""
     for k, v in src.items():
-        if k not in dst:
-            dst[k] = v
-        elif isinstance(dst[k], dict) and isinstance(v, dict):
-            _union(dst[k], v, f"{path}.{k}", errors)
-        elif dst[k] != v:
-            errors.append(f"{path}.{k} differs between processes")
-
-
-def _patched(origin: dict) -> bool:
-    """定義元が実験コードか exec か"""
-    file = origin.get("file") or ""
-    module = origin.get("module") or ""
-    return "/src/" in file or file.startswith("<string>") or module.startswith("src.")
+        if k not in dst or k == "value":
+            dst.setdefault(k, v)
+        elif isinstance(v, dict):
+            _add(dst[k], v)
+        elif isinstance(v, list):
+            if k in ("samples", "tamper"):
+                dst[k] = dst[k] + v
+        elif isinstance(v, (int, float)) and not isinstance(v, bool):
+            if k in ("min", "length_min"):
+                dst[k] = min(dst[k], v)
+            elif k in ("max", "length_max"):
+                dst[k] = max(dst[k], v)
+            else:
+                dst[k] += v
 
 
 def merge(d: str, run_id: str, out: str) -> None:
-    """プロセスごとの記録を observed.json に結合する。
-    全プロセスで同じ節（hook / 定義 / 継承 / env）は上位に 1 回、calls と reaches は回数を足す"""
+    """プロセスごとの記録を observed.json に結合する。定義は先に始まったプロセス（親。
+    差し替え後の姿）が勝ち、calls と reaches は回数を足す"""
     import glob
 
-    processes = [json.load(open(f)) for f in sorted(glob.glob(d + "/*.json"))]
-    errors: list[str] = []
-    shared: dict = {}
-    for key in (
-        "hook",
-        "src_modules",
-        "loaded_file_hashes",
-        "foreign_definitions",
-        "upstream_extensions",
-    ):
-        shared[key] = {}
-        for p in processes:
-            _union(shared[key], p.pop(key, None) or {}, key, errors)
-    # 定義元はプロセスで違い得る（親だけが差し替えた）。差し替えの側を残す
-    definitions: dict = shared.setdefault("loaded_definitions", {})
+    processes = sorted(
+        (json.load(open(f)) for f in glob.glob(d + "/*.json")),
+        key=lambda p: p["process"]["started"],
+    )
+    merged: dict = {"version": 2, "run_id": run_id}
     for p in processes:
-        for module, table in (p.pop("loaded_definitions", None) or {}).items():
-            dst = definitions.setdefault(module, {})
-            for name, origin in table.items():
-                if name not in dst or (_patched(origin) and not _patched(dst[name])):
-                    dst[name] = origin
+        p.pop("version", None)
+        process = p.pop("process")
+        errors = p.pop("errors", [])
+        for key, section in p.items():
+            _add(merged.setdefault(key, {}), section)
+        merged.setdefault("errors", []).extend(errors)
+        p["process"] = process
     envs = [p["process"]["env"] for p in processes]
     if envs and all(e == envs[0] for e in envs):
-        shared["env"] = envs[0]
+        merged["env"] = envs[0]
         for p in processes:
             p["process"].pop("env")
-
-    calls: dict = {}
-    for p in processes:
-        for fn, rec in p.pop("calls", {}).items():
-            m = calls.setdefault(fn, {"calls": 0, "args": {}, "samples": []})
-            m["calls"] += rec["calls"]
-            m["samples"] = (m["samples"] + rec["samples"])[:_SAMPLES]
-            for k, a in rec["args"].items():
-                ma = m["args"].setdefault(
-                    k, {"calls": 0, "types": set(), "values": {}, "seen": set()}
-                )
-                ma["calls"] += a["calls"]
-                ma["types"].update(a["types"])
-                ma["seen"].update(a["seen"])
-                for value, n in a["values"]:
-                    key = json.dumps(value, sort_keys=True, ensure_ascii=False)
-                    if key in ma["values"]:
-                        ma["values"][key]["calls"] += n
-                    elif len(ma["values"]) < _VALUES:
-                        ma["values"][key] = {"value": value, "calls": n}
-                for key, pick in (
-                    ("min", min),
-                    ("max", max),
-                    ("length_min", min),
-                    ("length_max", max),
-                ):
-                    if key in a:
-                        ma[key] = pick(ma[key], a[key]) if key in ma else a[key]
-    for m in calls.values():
-        for a in m["args"].values():
+    for fn in merged.get("calls", {}).values():
+        fn["samples"] = fn["samples"][:_SAMPLES]
+        for a in fn["args"].values():
             a["type"] = "|".join(sorted(a.pop("types")))
-            a["distinct"] = min(len(a.pop("seen")), _DISTINCT)
-            a["values"] = sorted(a["values"].values(), key=lambda e: -e["calls"])
-
-    reaches: dict = {
-        "opens": {},
-        "connects": {},
-        "getaddrinfo": {},
-        "spawns": {},
-        "env_changes": {},
-        "tamper": [],
-    }
-    for p in processes:
-        r = p.pop("reaches", {})
-        for path, rec in r.get("opens", {}).items():
-            dst = reaches["opens"].setdefault(path, {"experiment_code": rec.get("experiment_code")})
-            for mode, n in rec.items():
-                if mode != "experiment_code":
-                    dst[mode] = dst.get(mode, 0) + n
-        for key in ("connects", "getaddrinfo", "env_changes"):
-            for k, n in r.get(key, {}).items():
-                reaches[key][k] = reaches[key].get(k, 0) + n
-        for s in r.get("spawns", []):
-            key = json.dumps([s["event"], s["argv"], s["hooked"]])
-            dst = reaches["spawns"].setdefault(key, {**s, "n": 0})
-            dst["n"] += s["n"]
-        reaches["tamper"] += r.get("tamper", [])
-        errors += p.pop("errors", [])
-    reaches["spawns"] = list(reaches["spawns"].values())
-
-    merged = {
-        "version": 2,
-        "run_id": run_id,
-        **shared,
-        "calls": calls,
-        "reaches": reaches,
-        "processes": [p["process"] for p in processes],
-        "errors": errors,
-    }
+            a["distinct"] = min(len(a["values"]), _DISTINCT)
+            a["values"] = sorted(a["values"].values(), key=lambda e: -e["calls"])[:_VALUES]
+    if "spawns" in merged.get("reaches", {}):
+        merged["reaches"]["spawns"] = list(merged["reaches"]["spawns"].values())
+    merged["processes"] = [p["process"] for p in processes]
     with open(out, "w") as f:
         json.dump(merged, f, ensure_ascii=False, separators=(",", ":"))
 

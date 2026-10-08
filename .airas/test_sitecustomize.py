@@ -4,6 +4,7 @@
 記録を検査する。"""
 
 import glob
+import hashlib
 import json
 import os
 import secrets
@@ -56,9 +57,17 @@ def helper_fn(x):               # 宣言していないが実験コードから�
     return inner(x)
 """
 
+FAKEDEP = """
+class Client:
+    pass
+"""
+
 EXPERIMENT = """
 import os, socket, subprocess, sys, threading
-import fakepkg
+import fakepkg, fakedep
+class Replacement:                                            # 依存のクラスの差し替え（メソッド無し）
+    pass
+fakedep.Client = Replacement
 class Tuned(fakepkg.Controller):                              # 継承と override
     def run(self, *a, **k):
         return super().run(*a, **k)
@@ -75,9 +84,12 @@ def main():
     for _ in range(3):                                        # 長い文字列は sha で数える
         prompt("p" * 300)
         prompt("q" * 400)
+    fakepkg.helper_fn({"Authorization": "sk-" + "a" * 30})    # 辞書の中の鍵も sha に（先頭 3 回は repr を取る）
     fakepkg.helper_fn(7)
     fakepkg.helper_fn("sk-" + "a" * 30)                       # 鍵の形は sha に
     fakepkg.helper_fn(object())                               # アドレス入り repr は型だけ
+    with open(__file__, "a") as f:                            # import 後の書き換えは hash に出ない
+        f.write("# edited after import\\n")
     fakepkg.create("m")                                       # 省略の印の n は記録しない
     open(__file__).close()
     open(os.path.join(os.environ["AIRAS_OBSERVE_DIR"], "w.txt"), "w").close()
@@ -103,6 +115,9 @@ def main():
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         os.makedirs(f"{tmp}/fakepkg")
+        os.makedirs(f"{tmp}/fakedep")
+        with open(f"{tmp}/fakedep/__init__.py", "w") as f:
+            f.write(textwrap.dedent(FAKEDEP))
         os.makedirs(f"{tmp}/src")
         os.makedirs(f"{tmp}/out")
         with open(f"{tmp}/fakepkg/__init__.py", "w") as f:
@@ -201,11 +216,12 @@ def main():
             for v in connect["args"]["url"]["values"]
         )  # URL に含まれても伏せる
         helper = calls["fakepkg.helper_fn"]  # 宣言していない依存でも、実験コードから直接なら記録
-        assert helper["calls"] == 3
+        assert helper["calls"] == 4
         kinds = {json.dumps(v["value"], sort_keys=True) for v in helper["args"]["x"]["values"]}
         assert json.dumps(7) in kinds
         assert any('"sha256"' in k and '"len": 33' in k for k in kinds)  # 鍵の形は sha
         assert json.dumps({"type": "object"}, sort_keys=True) in kinds  # アドレスは残さない
+        assert any('"type": "dict"' in k and '"sha256"' in k for k in kinds)  # 辞書の中の鍵
         assert "fakepkg.inner" not in calls  # 依存同士の呼び出しは見ない
         assert list(calls["fakepkg.create"]["args"]) == ["model"]  # 省略の印は値ではない
         step = calls["adapter.step"]
@@ -222,10 +238,13 @@ def main():
         assert SECRET not in json.dumps(merged) and "t0kenvalue2" not in json.dumps(merged)
         assert "sk-" + "a" * 30 not in json.dumps(merged)
 
-        assert list(merged["src_modules"]) == ["src/adapter.py"]
+        assert merged["src_modules"] == {
+            "src/adapter.py": hashlib.sha256(textwrap.dedent(EXPERIMENT).encode()).hexdigest()
+        }  # import した時の内容。その後の追記は含まない
         assert merged["foreign_definitions"] == {
-            "pathlib.Path.is_dir": "src/adapter.py"
-        }  # import したクラスへの差し替えは定義元のモジュールで見る
+            "pathlib.Path.is_dir": "src/adapter.py",  # import したクラスへの差し替えは定義元のモジュールで見る
+            "fakedep.Client": "src/adapter.py",  # クラスごとの差し替え
+        }
         syms = merged["loaded_definitions"]["fakepkg"]
         assert (
             "dedent" not in syms and "Path" not in syms and "abstractmethod" not in syms
