@@ -513,7 +513,7 @@ def _finish():
     }
     path = os.path.join(_OUT_DIR, f"{os.getpid()}-{int(_started * 1000)}.json")
     with open(path, "w") as f:
-        json.dump(out, f, ensure_ascii=False, default=str, separators=(",", ":"))
+        json.dump(out, f, ensure_ascii=False, default=str, indent=1)
 
 
 def install() -> None:
@@ -578,7 +578,7 @@ def merge(d: str, run_id: str, out: str) -> None:
         merged["reaches"]["spawns"] = list(merged["reaches"]["spawns"].values())
     merged["processes"] = [p["process"] for p in processes]
     with open(out, "w") as f:
-        json.dump(merged, f, ensure_ascii=False, separators=(",", ":"))
+        json.dump(merged, f, ensure_ascii=False, indent=1)
 
 
 if __name__ == "__main__":  # python3 sitecustomize.py merge <dir> <run_id> <out>
