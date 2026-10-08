@@ -44,6 +44,16 @@ class Controller(abc.ABC):  # ABC は _abc_impl を各クラスに置く。overr
         return list(stream()) + propose(None)
     def helper(self):
         return 0
+class NotGiven:                 # openai 流の「省略」の印
+    def __repr__(self):
+        return "NOT_GIVEN"
+NOT_GIVEN = NotGiven()
+def create(model, n=NOT_GIVEN):
+    return model
+def inner(y):                   # 依存同士の呼び出し。記録しない
+    return y
+def helper_fn(x):               # 宣言していないが実験コードから直接呼ばれる
+    return inner(x)
 """
 
 EXPERIMENT = """
@@ -54,8 +64,21 @@ class Tuned(fakepkg.Controller):                              # 継承と overri
         return super().run(*a, **k)
     def extra(self):
         return 0
+def step(i):
+    return i
+def prompt(text):
+    return len(text)
 def main():
     secret = os.environ["MY_SECRET_VALUE"]
+    for i in range(60):                                       # 異なり値 50 の上限を超える
+        step(i)
+    for _ in range(3):                                        # 長い文字列は sha で数える
+        prompt("p" * 300)
+        prompt("q" * 400)
+    fakepkg.helper_fn(7)
+    fakepkg.helper_fn("sk-" + "a" * 30)                       # 鍵の形は sha に
+    fakepkg.helper_fn(object())                               # アドレス入り repr は型だけ
+    fakepkg.create("m")                                       # 省略の印の n は記録しない
     open(__file__).close()
     open(os.path.join(os.environ["AIRAS_OBSERVE_DIR"], "w.txt"), "w").close()
     open(os.path.join(os.environ["AIRAS_OBSERVE_DIR"], "w.txt"), "a").close()
@@ -108,83 +131,10 @@ def main():
         child = next(r for r in recs if r["process"]["argv"] == ["-c"])
 
         assert parent["errors"] == [], parent["errors"]
-        calls = [(c["fn"], c["args"]) for c in parent["calls"]]
-        assert calls[0] == (
-            "fakepkg.Controller.run",
-            {"max_iterations": 20, "eval_debug_rounds": 5},
-        )
-        assert calls[1] == ("fakepkg.stream", {}) and "ret" not in parent["calls"][1]
-        assert calls[2][0] == "fakepkg.propose" and calls[2][1]["seed"] is None
-        assert calls[3][1]["seed"] == 3 and calls[3][1]["data"]["type"] == "list"
-        assert calls[4][1]["data"] == "thread"  # 平文
-        assert calls[5][1]["url"] == "http://h:8000/v1"
-        assert calls[5][1]["api_key"] == {
-            "redacted": "MY_SECRET_VALUE",
-            "len": len(SECRET),
-        }
-        assert calls[6][1]["url"]["redacted"] == "MY_SECRET_VALUE"
-        assert calls[6][1]["api_key"] == "short"
-        assert calls[7][1]["data"]["redacted"] == "MY_SECRET_VALUE"
-        assert (
-            len(calls) == 8
-        )  # 差し替え後の propose は上流の code ではないので数えない
-        assert parent["calls"][0]["ret"]["type"] == "list"
-        assert parent["calls"][4]["thread"] != parent["calls"][0]["thread"]
-        assert SECRET not in json.dumps(parent) and "t0kenvalue2" not in json.dumps(
-            parent
-        )
-
-        env_rec = parent["process"]["env"]
-        assert env_rec["FAKE_MODE"] == "fast"
-        assert (
-            env_rec["AIRAS_SECRET_NAMES"] == "MY_SECRET_VALUE"
-        )  # 名前の一覧は伏せない
-        assert env_rec["MY_SECRET_VALUE"]["redacted"] == "MY_SECRET_VALUE"
-        assert env_rec["FAKE_TOKEN"]["redacted"] == "FAKE_TOKEN"
-
-        syms = parent["loaded_definitions"]["fakepkg"]
-        assert (
-            "dedent" not in syms and "Path" not in syms and "abstractmethod" not in syms
-        )  # import した名前は記録しない（stdlib の frozen モジュール由来も）
-        assert (
-            syms["generated"]["file"] == "<string>" and parent["errors"] == []
-        )  # exec 由来（module None）は出自不明として残し、落ちない
-        assert (
-            "Config" in syms and "Config.__init__" not in syms
-        )  # 生成メソッドは記録しない
+        assert child["calls"]["fakepkg.propose"]["calls"] == 1
         assert list(parent["hook"]) == ["sha256"]  # 宣言の写しは持たない
-        assert (
-            "Controller.ext" not in syms
-        )  # 外部定義は記録しない。snapshot との突き合わせで欠落として見える
-        assert syms["Path.is_dir"]["file"].endswith(
-            "src/adapter.py"
-        )  # import したクラスへの差し替えは残す
-        assert "Path.exists" not in syms
-        assert syms["propose"]["file"].endswith("src/adapter.py")
-        assert syms["Controller.helper"]["file"].endswith("src/adapter.py")
-        assert syms["Controller.run"]["file"].endswith("fakepkg/__init__.py")
-        assert parent["loaded_file_hashes"]["fakepkg"]["sha256"]
-        assert parent["upstream_extensions"] == {
-            "adapter.Tuned": {"bases": ["fakepkg.Controller"], "overrides": ["run"]}
-        }
 
-        r = parent["reaches"]
-        assert r["opens"][f"{tmp}/src/adapter.py"]["modes"] == {"r": 1}
-        assert r["opens"][f"{tmp}/out/w.txt"]["modes"] == {"w": 1, "a": 1}
-        assert all(
-            v["experiment_code"].startswith(f"{tmp}/src/") for v in r["opens"].values()
-        )
-        assert r["getaddrinfo"] == {"localhost": 1}
-        assert [s["hooked"] for s in r["spawns"]] == [True, False]
-        assert r["env_changes"] == [{"event": "os.putenv", "name": "FOO"}]
-        assert [t["event"] for t in r["tamper"]] == ["sys.setprofile"]
-        assert r["tamper"][0]["experiment_code"].startswith(f"{tmp}/src/")
-
-        assert [c["fn"] for c in child["calls"]] == ["fakepkg.propose"]
-        assert child["loaded_definitions"]["fakepkg"]["propose"]["file"].endswith(
-            "fakepkg/__init__.py"
-        )
-        # 結合: 全プロセスで同じ節は上位に 1 回だけ
+        # 結合: 定義は union、calls と reaches は回数を足す
         subprocess.run(
             [
                 sys.executable,
@@ -197,17 +147,116 @@ def main():
             check=True,
         )
         merged = json.load(open(f"{tmp}/observed.json"))
-        assert merged["run_id"] == "t" and len(merged["processes"]) == 2
-        assert "hook" in merged and "loaded_file_hashes" in merged
-        assert all(
-            "hook" not in p and "loaded_file_hashes" not in p for p in merged["processes"]
-        )
+        assert merged["version"] == 2 and merged["run_id"] == "t"
+        assert merged["errors"] == [], merged["errors"]
+        assert len(merged["processes"]) == 2
         # env は子に FOO が足されているので同じにならず、各プロセスに残る
-        assert "env" not in merged
-        assert all("env" in p["process"] for p in merged["processes"])
+        assert "env" not in merged and all("env" in p for p in merged["processes"])
+        env_rec = next(p["env"] for p in merged["processes"] if p["argv"] == ["run.py"])
+        assert env_rec["FAKE_MODE"] == "fast"
+        assert (
+            env_rec["AIRAS_SECRET_NAMES"] == "MY_SECRET_VALUE"
+        )  # 名前の一覧は伏せない
+        assert env_rec["MY_SECRET_VALUE"]["redacted"] == "MY_SECRET_VALUE"
+        assert env_rec["FAKE_TOKEN"]["redacted"] == "FAKE_TOKEN"
+
+        calls = merged["calls"]
+        run = calls["fakepkg.Controller.run"]
+        assert run["calls"] == 1
+        assert run["args"]["max_iterations"] == {
+            "type": "int",
+            "calls": 1,
+            "distinct": 1,
+            "values": [{"value": 20, "calls": 1}],
+            "min": 20,
+            "max": 20,
+        }
+        assert run["args"]["eval_debug_rounds"]["values"] == [{"value": 5, "calls": 1}]
+        assert run["samples"][0]["ret"]["type"] == "list"
+        stream = calls["fakepkg.stream"]
+        assert stream["calls"] == 1 and "ret" not in stream["samples"][0]  # 再開は数えない
+        propose = calls["fakepkg.propose"]
+        assert propose["calls"] == 5  # 親 4 回 + 子 1 回。差し替え後の lambda は数えない
+        assert propose["args"]["seed"]["values"] == [
+            {"value": None, "calls": 4},
+            {"value": 3, "calls": 1},
+        ]
+        data = propose["args"]["data"]["values"]
+        assert any(v["value"] == "thread" for v in data)  # 平文
+        assert any(
+            isinstance(v["value"], dict) and v["value"].get("type") == "list" for v in data
+        )  # 長い値は型・長さ・sha256
+        assert any(
+            isinstance(v["value"], dict) and v["value"].get("redacted") == "MY_SECRET_VALUE"
+            for v in data
+        )  # dict の repr に含まれる秘密も伏せる
+        connect = calls["fakepkg.connect"]
+        assert connect["calls"] == 2
+        assert {json.dumps(v["value"]) for v in connect["args"]["api_key"]["values"]} == {
+            json.dumps({"redacted": "MY_SECRET_VALUE", "len": len(SECRET)}),
+            json.dumps("short"),
+        }
+        assert any(
+            isinstance(v["value"], dict) and v["value"].get("redacted") == "MY_SECRET_VALUE"
+            for v in connect["args"]["url"]["values"]
+        )  # URL に含まれても伏せる
+        helper = calls["fakepkg.helper_fn"]  # 宣言していない依存でも、実験コードから直接なら記録
+        assert helper["calls"] == 3
+        kinds = {json.dumps(v["value"], sort_keys=True) for v in helper["args"]["x"]["values"]}
+        assert json.dumps(7) in kinds
+        assert any('"sha256"' in k and '"len": 33' in k for k in kinds)  # 鍵の形は sha
+        assert json.dumps({"type": "object"}, sort_keys=True) in kinds  # アドレスは残さない
+        assert "fakepkg.inner" not in calls  # 依存同士の呼び出しは見ない
+        assert list(calls["fakepkg.create"]["args"]) == ["model"]  # 省略の印は値ではない
+        step = calls["adapter.step"]
+        assert step["calls"] == 60
+        assert step["args"]["i"]["distinct"] == 60 and len(step["args"]["i"]["values"]) == 50
+        assert (step["args"]["i"]["min"], step["args"]["i"]["max"]) == (0, 59)
+        text_arg = calls["adapter.prompt"]["args"]["text"]
+        assert text_arg["distinct"] == 2 and text_arg["calls"] == 6
+        assert (text_arg["length_min"], text_arg["length_max"]) == (300, 400)
+        assert all("sha256" in v["value"] for v in text_arg["values"])
+        assert calls["adapter.main"]["calls"] == 1
+        assert not any("<lambda>" in fn for fn in calls)
+        assert "adapter.Tuned" not in calls  # クラス本体の実行は呼び出しではない
+        assert SECRET not in json.dumps(merged) and "t0kenvalue2" not in json.dumps(merged)
+        assert "sk-" + "a" * 30 not in json.dumps(merged)
+
+        assert list(merged["src_modules"]) == ["src/adapter.py"]
+        assert merged["foreign_definitions"] == {
+            "pathlib.Path.is_dir": "src/adapter.py"
+        }  # import したクラスへの差し替えは定義元のモジュールで見る
+        syms = merged["loaded_definitions"]["fakepkg"]
+        assert (
+            "dedent" not in syms and "Path" not in syms and "abstractmethod" not in syms
+        )  # import した名前は記録しない（stdlib の frozen モジュール由来も）
+        assert "Path.is_dir" not in syms  # foreign_definitions の側
+        assert syms["generated"]["file"] == "<string>"  # exec 由来（module None）は出自不明として残す
+        assert (
+            "Config" in syms and "Config.__init__" not in syms
+        )  # 生成メソッドは記録しない
+        assert (
+            "Controller.ext" not in syms
+        )  # 外部定義は記録しない。snapshot との突き合わせで欠落として見える
+        assert syms["propose"]["file"].endswith("src/adapter.py")
+        assert syms["Controller.helper"]["file"].endswith("src/adapter.py")
+        assert syms["Controller.run"]["file"].endswith("fakepkg/__init__.py")
+        assert merged["loaded_file_hashes"]["fakepkg"]["sha256"]
+        assert merged["upstream_extensions"] == {
+            "adapter.Tuned": {"bases": ["fakepkg.Controller"], "overrides": ["run"]}
+        }
+
+        r = merged["reaches"]
+        assert r["opens"]["src/adapter.py"]["r"] == 1  # cwd からの相対パス
+        assert (r["opens"]["out/w.txt"]["w"], r["opens"]["out/w.txt"]["a"]) == (1, 1)
         assert all(
-            "loaded_definitions" in p for p in merged["processes"]
-        )  # 親は差し替え後なので子と違う
+            v["experiment_code"].startswith(f"{tmp}/src/") for v in r["opens"].values()
+        )
+        assert r["getaddrinfo"] == {"localhost": 1}
+        assert [(s["hooked"], s["n"]) for s in r["spawns"]] == [(True, 1), (False, 1)]
+        assert r["env_changes"] == {"FOO": 1}
+        assert [t["event"] for t in r["tamper"]] == ["sys.setprofile"]
+        assert r["tamper"][0]["experiment_code"].startswith(f"{tmp}/src/")
         # integration: run の design の repository_integration から、文献（凍結前は並び順の id）の
         # method_entry と各 argument
         os.makedirs(f"{tmp}/.research")
