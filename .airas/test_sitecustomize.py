@@ -129,6 +129,10 @@ def main():
 """
 
 
+def arg(rec: dict, name: str) -> dict:
+    return next(a for a in rec["args"] if a["name"] == name)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         for d in ("fakepkg", "fakedep", "src", "out"):
@@ -192,7 +196,8 @@ def main():
         calls = merged["calls"]
         run = calls["fakepkg.Controller.run"]  # 実験コードから直接呼んだ依存
         assert run["calls"] == 1
-        assert run["args"]["max_iterations"] == {
+        assert arg(run, "max_iterations") == {
+            "name": "max_iterations",
             "type": "int",
             "calls": 1,
             "distinct": 1,
@@ -200,46 +205,46 @@ def main():
             "min": 20,
             "max": 20,
         }
-        assert run["args"]["eval_debug_rounds"]["values"] == [{"value": 5, "calls": 1}]
+        assert arg(run, "eval_debug_rounds")["values"] == [{"value": 5, "calls": 1}]
         assert run["samples"][0]["ret"]["type"] == "list"
         assert "fakepkg.stream" not in calls and "fakepkg.inner" not in calls  # 依存同士の呼び出し
         propose = calls["fakepkg.propose"]
         assert propose["calls"] == 3  # 実験コードから 3 回。run() の中の 1 回と差し替え後の lambda は数えない
-        assert propose["args"]["seed"]["values"] == [
+        assert arg(propose, "seed")["values"] == [
             {"value": None, "calls": 2},
             {"value": 3, "calls": 1},
         ]
-        data = {json.dumps(v["value"], sort_keys=True) for v in propose["args"]["data"]["values"]}
+        data = {json.dumps(v["value"], sort_keys=True) for v in arg(propose, "data")["values"]}
         assert json.dumps("thread") in data  # 平文
         assert json.dumps({"type": "list"}, sort_keys=True) in data  # 大きいコンテナは型だけ
         assert any('"redacted": "MY_SECRET_VALUE"' in d for d in data)  # 小さい dict の repr の中の秘密
-        assert propose["args"]["data"]["length_max"] == 1000
+        assert arg(propose, "data")["length_max"] == 1000
         connect = calls["fakepkg.connect"]
         assert connect["calls"] == 2
-        assert {json.dumps(v["value"]) for v in connect["args"]["api_key"]["values"]} == {
+        assert {json.dumps(v["value"]) for v in arg(connect, "api_key")["values"]} == {
             json.dumps({"redacted": "MY_SECRET_VALUE", "len": len(SECRET)}),
             json.dumps("short"),
         }
         assert any(
             isinstance(v["value"], dict) and v["value"].get("redacted") == "MY_SECRET_VALUE"
-            for v in connect["args"]["url"]["values"]
+            for v in arg(connect, "url")["values"]
         )  # URL に含まれても伏せる
         helper = calls["fakepkg.helper_fn"]
         assert helper["calls"] == 4
-        kinds = {json.dumps(v["value"], sort_keys=True) for v in helper["args"]["x"]["values"]}
+        kinds = {json.dumps(v["value"], sort_keys=True) for v in arg(helper, "x")["values"]}
         assert json.dumps(7) in kinds
         assert any('"sha256"' in k and '"len": 33' in k for k in kinds)  # 鍵の形は sha
         assert any('"type": "dict"' in k and '"sha256"' in k for k in kinds)  # 辞書の中の鍵も
         assert json.dumps({"type": "object"}, sort_keys=True) in kinds  # アドレスは残さない
-        assert list(calls["fakepkg.create"]["args"]) == ["model"]  # 省略の印は値ではない
-        assert list(calls["fakepkg.reduce"]["args"]) == ["a"]
+        assert [a["name"] for a in calls["fakepkg.create"]["args"]] == ["model"]  # 省略の印は値ではない
+        assert [a["name"] for a in calls["fakepkg.reduce"]["args"]] == ["a"]
         assert "fakepkg._private" not in calls
-        assert calls["fakepkg.Thing.__init__"]["args"]["n"]["values"] == [{"value": 3, "calls": 1}]
+        assert arg(calls["fakepkg.Thing.__init__"], "n")["values"] == [{"value": 3, "calls": 1}]
         step = calls["adapter.step"]
         assert step["calls"] == 61  # 親 60 回 + 子 1 回
-        assert step["args"]["i"]["distinct"] == 61 and len(step["args"]["i"]["values"]) == 50
-        assert (step["args"]["i"]["min"], step["args"]["i"]["max"]) == (0, 99)
-        text = calls["adapter.prompt"]["args"]["text"]
+        assert arg(step, "i")["distinct"] == 61 and len(arg(step, "i")["values"]) == 50
+        assert (arg(step, "i")["min"], arg(step, "i")["max"]) == (0, 99)
+        text = arg(calls["adapter.prompt"], "text")
         assert text["distinct"] == 2 and text["calls"] == 6
         assert (text["length_min"], text["length_max"]) == (300, 400)
         assert all("sha256" in v["value"] for v in text["values"])

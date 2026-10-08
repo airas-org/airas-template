@@ -6,7 +6,8 @@ AIRAS_OBSERVE_DIR/<pid>-<開始時刻>.json へ書き、Makefile が `merge` で
 record の宣言は読まない。観測の範囲が宣言で狭まらないためで、何を宣言と比べるかは gate が決める。
 
 - calls: 関数ごとに 1 項目。対象は実験コード（src/）で定義された関数と、実験コードから直接
-  呼ばれた依存の関数（stdlib、依存同士の呼び出し、`_` で始まる内部名は除く。`__init__` と `__call__` は見る）。項目は呼び出し回数、引数ごとの
+  呼ばれた依存の関数（stdlib、依存同士の呼び出し、`_` で始まる内部名は除く。`__init__` と `__call__` は見る）。項目は呼び出し回数、引数ごと
+  （`args` はリスト。観測された引数名は鍵ではなく `name` に置き、辞書の鍵は全部この記録の語彙にする）の
   「取った値 → 回数」（回数の多い 50 値。異なり数は 1000 まで数え、そこまでは回数も正確。
   数値は min/max、長さのあるものは length_min/max）、先頭 3 回の全引数と戻り値。
   値はスカラー・文字列・要素 20 個以下のコンテナなら中身（200 文字超は型・長さ・sha256。
@@ -574,6 +575,8 @@ def merge(d: str, run_id: str, out: str) -> None:
             a["type"] = "|".join(sorted(a.pop("types")))
             a["distinct"] = min(len(a["values"]), _DISTINCT)
             a["values"] = sorted(a["values"].values(), key=lambda e: -e["calls"])[:_VALUES]
+        # 観測された引数名を鍵にしない: 鍵はこの記録の語彙だけ、名前は name に
+        fn["args"] = [{"name": name, **a} for name, a in fn["args"].items()]
     if "spawns" in merged.get("reaches", {}):
         merged["reaches"]["spawns"] = list(merged["reaches"]["spawns"].values())
     merged["processes"] = [p["process"] for p in processes]
