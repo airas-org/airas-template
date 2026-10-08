@@ -16,9 +16,10 @@ record の宣言は読まない。観測の範囲が宣言で狭まらないた�
   （Actions secrets の一覧。ローカルでは ~/.airas/credentials.json のキー）の環境変数から集める
 - src_modules: 実験コードの各ファイルの sha256。そのコードが初めて走った時（import 直後）に
   読むので、後からの書き換えは入らない（.pyc は見ない）。gate が実行コミットの同じファイルと比べる
-- loaded_file_hashes: lock の hash が守らない依存、つまり index 以外（git / URL / ローカル）から入った
-  配布物と site-packages の外（PYTHONPATH に乗せた clone）のモジュールの、ファイルの sha256。gate が
-  record のリポジトリのスナップショットと比べ、上流が原本のまま走ったかを見る
+- loaded_file_hashes: uv.lock が守らないモジュールのファイルの sha256。守られているのは、lock に
+  index（registry）由来として同じ版で載っている配布物だけ。git / URL / ローカル由来、lock に無い
+  追加 install、PYTHONPATH に乗せた clone は全部 hash する。gate が record のリポジトリの
+  スナップショットと比べ、上流が原本のまま走ったかを見る
 - redefinitions: 依存（上流を含む）の名前空間にある名前のうち、定義元が実験コードのもの。
   monkeypatch とクラスの差し替え
 - extensions: 実験コードのクラスのうち stdlib 以外のクラスを継承するもの。基底と override したメソッド名
@@ -384,22 +385,30 @@ def _from_experiment(file: str) -> bool:
     return file.startswith(_EXPERIMENT_CODE)
 
 
-def _unlocked_packages() -> set[str]:
-    """index 以外（git / URL / ローカル）から入った配布物の最上位モジュール名。lock の hash が守らないもの"""
+def _locked_modules() -> set[str]:
+    """uv.lock の hash が守る最上位モジュール名: index（registry）由来として lock に載り、
+    入っている版も同じ配布物のもの。lock が無ければ空（= 全部 hash する）"""
     import importlib.metadata as metadata
+    import tomllib
+
+    def norm(name: str) -> str:
+        return re.sub(r"[-_.]+", "-", name).lower()
 
     found: set[str] = set()
     try:
-        modules_of: dict[str, set[str]] = {}
+        with open(os.path.join(_CWD, "uv.lock"), "rb") as f:
+            lock = tomllib.load(f)
+        locked = {
+            (norm(pkg["name"]), pkg.get("version"))
+            for pkg in lock.get("package", [])
+            if "registry" in pkg.get("source", {})
+        }
         for module, dists in metadata.packages_distributions().items():
-            for d in dists:
-                modules_of.setdefault(d, set()).add(module)
-        for dist in metadata.distributions():
-            if dist.read_text("direct_url.json"):
-                found |= modules_of.get(dist.metadata["Name"], set())
-    except Exception as e:
+            if any((norm(d), metadata.version(d)) in locked for d in dists):
+                found.add(module)
+    except Exception as e:  # lock や metadata が読めなければ守られていない扱い
         if len(_errors) < 100:
-            _errors.append(f"packages: {e!r}")
+            _errors.append(f"lock: {e!r}")
     return found
 
 
@@ -414,13 +423,12 @@ def _dependency_file(cls) -> str | None:
 def _definitions():
     """(loaded_file_hashes, redefinitions)。実験コード以外の全モジュールを見る"""
     hashes, redefined = {}, {}
-    unlocked = _unlocked_packages()
+    locked = _locked_modules()
     for name, mod in list(sys.modules.items()):
         file = getattr(mod, "__file__", None)
         if not file or file.startswith(_EXPERIMENT_CODE) or file == _SELF:
             continue
-        installed = "site-packages" in file or "dist-packages" in file
-        if not _is_stdlib(file) and (not installed or name.split(".")[0] in unlocked):
+        if not _is_stdlib(file) and name.split(".")[0] not in locked:
             hashes[name] = {"file": file, "sha256": _file_sha(file)}
         for attr, obj in list(vars(mod).items()):
             if attr.startswith("__"):

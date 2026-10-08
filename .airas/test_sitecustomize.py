@@ -19,6 +19,16 @@ SECRET = secrets.token_hex(8)  # 伏せられるべき値。実行ごとに作�
 UPSTREAM = """
 from pathlib import Path
 from textwrap import dedent
+class _Proxy:                   # openai._extras のように、触ると import を試みて失敗する遅延 proxy
+    @property
+    def __class__(self):
+        raise RuntimeError("missing dependency")
+proxy = _Proxy()
+class _NoValueType:             # numpy 流の「値が渡されていない」印
+    pass
+_NoValue = _NoValueType()
+def reduce(a, initial=_NoValue):
+    return a
 _g = {}
 exec("def generated():\\n    return 1", _g)
 generated = _g["generated"]  # exec 由来（定義元 "<string>"）
@@ -92,6 +102,7 @@ def main():
     fakepkg.helper_fn("sk-" + "a" * 30)                       # 鍵の形は sha に
     fakepkg.helper_fn(object())                               # アドレス入り repr は型だけ
     fakepkg.create("m")                                       # 省略の印の n は記録しない
+    fakepkg.reduce(1)                                         # numpy 流の印も同じ
     fakepkg._private(1)
     fakepkg.Thing(3)
     exec("x = 1")                                             # 実験コードが直接呼んだ exec
@@ -126,6 +137,16 @@ def main():
             f.write(textwrap.dedent(UPSTREAM))
         with open(f"{tmp}/fakedep/__init__.py", "w") as f:
             f.write(textwrap.dedent(FAKEDEP))
+        # 配布物の metadata: fakedep は uv.lock に index 由来で同じ版が載る（守られる）、
+        # fakepkg は入っているが lock に無い（追加 install。守られない）
+        for name, version in (("fakedep", "1.0"), ("fakepkg", "2.0")):
+            os.makedirs(f"{tmp}/{name}-{version}.dist-info")
+            with open(f"{tmp}/{name}-{version}.dist-info/METADATA", "w") as f:
+                f.write(f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n")
+            with open(f"{tmp}/{name}-{version}.dist-info/top_level.txt", "w") as f:
+                f.write(f"{name}\n")
+        with open(f"{tmp}/uv.lock", "w") as f:
+            f.write('[[package]]\nname = "fakedep"\nversion = "1.0"\nsource = { registry = "https://pypi.org/simple" }\n')
         with open(f"{tmp}/src/adapter.py", "w") as f:
             f.write(textwrap.dedent(EXPERIMENT))
         with open(f"{tmp}/run.py", "w") as f:
@@ -211,6 +232,7 @@ def main():
         assert any('"type": "dict"' in k and '"sha256"' in k for k in kinds)  # 辞書の中の鍵も
         assert json.dumps({"type": "object"}, sort_keys=True) in kinds  # アドレスは残さない
         assert list(calls["fakepkg.create"]["args"]) == ["model"]  # 省略の印は値ではない
+        assert list(calls["fakepkg.reduce"]["args"]) == ["a"]
         assert "fakepkg._private" not in calls
         assert calls["fakepkg.Thing.__init__"]["args"]["n"]["values"] == [{"value": 3, "calls": 1}]
         step = calls["adapter.step"]
@@ -233,14 +255,16 @@ def main():
             "src/adapter.py": hashlib.sha256(textwrap.dedent(EXPERIMENT).encode()).hexdigest()
         }  # import した時の内容。その後の追記は含まない
         hashes = merged["loaded_file_hashes"]
-        assert hashes["fakepkg"]["sha256"] and hashes["fakedep"]["sha256"]
+        assert hashes["fakepkg"]["sha256"]  # 入っているが lock に無い → hash する
+        assert "fakedep" not in hashes  # lock に index 由来で同じ版 → uv が守るので hash しない
         assert "os" not in hashes and "pathlib" not in hashes  # stdlib は hash しない
         assert merged["redefinitions"] == {
             "fakepkg.propose": "src/adapter.py",
             "fakepkg.Controller.helper": "src/adapter.py",
             "pathlib.Path.is_dir": "src/adapter.py",  # import したクラスへの差し替えは定義元のモジュールで見る
             "fakedep.Client": "src/adapter.py",  # クラスごとの差し替え
-        }  # exec 由来の generated、Config の生成 dunder、外部定義の Controller.ext、import しただけの名前は含まない
+        }  # exec 由来の generated、Config の生成 dunder、外部定義の Controller.ext、import しただけの名前、
+        # 触ると失敗する proxy は含まず、proxy の後の定義（propose など）も取れている
         assert merged["extensions"] == {
             "adapter.Tuned": {"bases": ["fakepkg.Controller"], "overrides": ["run"]}
         }  # abc.ABC は stdlib なので基底に数えない
