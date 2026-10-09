@@ -131,8 +131,8 @@ jobs:
               exit $exit_status
             fi
 
-      - name: Install uv (fallback if no Docker)
-        if: steps.check-docker.outputs.has_docker == 'false' || steps.check-docker.outputs.has_dockerfile == 'false'
+      - name: Install uv
+        # 実験の実行（Docker が無いとき）と、実行後の implementation review（常に）に使う
         uses: Wandalen/wretry.action@v3
         with:
           action: astral-sh/setup-uv@v6
@@ -206,6 +206,19 @@ jobs:
               make run RUN_ID="$RUN_ID" MODE="$MODE"
               echo "=== [EXPERIMENT RUN] PASSED for $RUN_ID at $(date -u) ==="
             ) > >(tee -a "$RESULTS_DIR/stdout.txt") 2> >(tee -a "$RESULTS_DIR/stderr.txt" >&2)
+
+      - name: Review the implementation against its declaration
+        # 実験のあと、宣言（record。凍結前は .research/design.json）とこのコミットのコード、observed.json を
+        # 1 つのモデルに読ませ、所見を results に置く。エージェントの手元ではなくここで書くので、所見は run の
+        # provenance と一緒に取り込まれ、途中で書き換えられない
+        if: steps.run-exp-docker.outcome == 'success' || steps.run-exp-native.outcome == 'success'
+        run: |
+          if [ ! -w "$RESULTS_DIR/$RUN_ID" ]; then
+            sudo chown -R "$(id -u):$(id -g)" "$RESULTS_DIR/$RUN_ID"  # Docker が root で書いた分
+          fi
+          # airas の commit SHA は、airas 側の CI（pin_airas_template.yml）によって自動的に書き換えられる。
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@89679ca8fac1dc6bd247f421aa87fd399a9a1411#subdirectory=backend" \
+            airas review-implementation --local-path . --run-id "$RUN_ID" --commit "$GITHUB_SHA" --results-dir "$RESULTS_DIR"
 
       - name: Check result
         id: check-result
