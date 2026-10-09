@@ -534,8 +534,11 @@ def _finish():
         "errors": _errors,
     }
     path = os.path.join(_OUT_DIR, f"{os.getpid()}-{int(_started * 1000)}.json")
-    with open(path, "w") as f:
+    # 書き終える前に親に kill された子（SimWorker のような）が途中までの JSON を残すと merge が全部落ちる。
+    # 書き切ってから .json にする（*.json しか merge は読まない）
+    with open(path + ".tmp", "w") as f:
         json.dump(out, f, ensure_ascii=False, default=str, indent=1)
+    os.replace(path + ".tmp", path)
 
 
 def install() -> None:
