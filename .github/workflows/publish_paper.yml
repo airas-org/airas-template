@@ -152,10 +152,12 @@ jobs:
           for _ in $(seq 1 60); do
             sleep 20
             state=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs" \
-              --jq '[.check_runs[] | select(.name == "Verify the record")]
-                    | if length == 0 then "pending"
-                      else (.[0] | if .status == "completed" then .conclusion else .status end) end')
-            echo "Verify the record on $sha: $state"
+              --jq '[.check_runs[] | select(.name == "Verify the record" or .name == "Verify the paper")]
+                    | if length < 2 then "pending"
+                      elif any(.status != "completed") then "in_progress"
+                      elif all(.conclusion == "success") then "success"
+                      else "failure" end')
+            echo "Verify the record and the paper on $sha: $state"
             case "$state" in
               success) break ;;
               failure|cancelled|timed_out|action_required|stale)
