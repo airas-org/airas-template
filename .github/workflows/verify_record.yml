@@ -34,7 +34,7 @@ jobs:
           GH_PERSONAL_ACCESS_TOKEN: ${{ github.token }}
         run: |
           # airas の commit SHA は、airas 側の CI（pin_airas_template.yml）によって自動的に書き換えられる。
-          uvx --from "airas @ git+https://github.com/airas-org/airas.git@78d69ae1b91127fad4c1c64ca69dc904df7e95eb#subdirectory=backend" \
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@e3fa57631f75e3df6a2262b4b7da2eb9fd23012d#subdirectory=backend" \
             airas verify-record --local-path .
 
       # The gate's report (.research/verification.md: every live declaration
