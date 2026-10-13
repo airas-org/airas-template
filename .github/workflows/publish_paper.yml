@@ -95,7 +95,7 @@ jobs:
         if: steps.paper.outputs.present == 'true'
         run: |
           # airas の commit SHA は、airas 側の CI（pin_airas_template.yml）によって自動的に書き換えられる。
-          uvx --from "airas @ git+https://github.com/airas-org/airas.git@e3fa57631f75e3df6a2262b4b7da2eb9fd23012d#subdirectory=backend" \
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@85256109920cb1cd33abe3cac43bcbd1ae9cbd88#subdirectory=backend" \
             airas publish-paper --local-path . --output-dir paper-artifact
 
       - name: Upload the built PDF
