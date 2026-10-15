@@ -26,5 +26,11 @@ full run, on top of the experiment code. Results come back through
 `import_run_outputs` with provenance. Nothing in the record is rewritten to
 fit data later; a refuted claim is a negative result.
 
+Literature enters `.research/sources/` the same way: `dispatch_literature_fetch`
+runs a search in `fetch_literature.yml`, and `import_literature_from_artifacts`
+commits every result from that run's artifact. Never write `.research/sources/`
+by hand — the gate compares each source new to the default branch with the
+artifact it claims to come from.
+
 The step-by-step flow is in the `airas` plugin skills (`auto-research`
 first). `get_prompts(step="hypothesis_and_design")` returns the claim shape.
