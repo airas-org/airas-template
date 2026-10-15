@@ -45,7 +45,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      LITERATURE_DIR: ${{ runner.temp }}/literature
+      # Outside the checkout so it is never committed; `runner` is not available at job level.
+      LITERATURE_DIR: /tmp/literature
 
     steps:
       - name: Checkout repository
