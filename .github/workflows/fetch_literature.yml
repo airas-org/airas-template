@@ -15,7 +15,7 @@ on:
         required: true
       sources:
         description: 'Comma-separated search sources, or "all"'
-        default: "all"
+        default: "arxiv,airas_records"
       max_results_per_source:
         description: "Results per source"
         default: "5"
