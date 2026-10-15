@@ -2,11 +2,11 @@ name: "Fetch Literature"
 run-name: "📚 Fetch literature: ${{ inputs.query }}"
 
 # The only way literature enters .research/sources/: this run searches,
-# fetches every result's text and the search source's metadata, and uploads
-# them as an artifact; import_literature_from_artifacts commits that artifact,
-# and the record gate compares .research/sources/ against it. Nothing here
-# reads the repository, so what the run fetched does not depend on files the
-# agent can edit.
+# fetches every result's text and the search source's metadata, uploads them
+# as an artifact, and commits a byte-for-byte copy onto the dispatched branch.
+# The record gate compares every source new to the default branch with that
+# artifact. The checkout is only written to: no file from the repository is
+# executed, so what the run fetched does not depend on files the agent can edit.
 on:
   workflow_dispatch:
     inputs:
@@ -28,7 +28,12 @@ on:
         default: false
 
 permissions:
-  contents: read
+  contents: write
+
+# Two runs on one branch would number their sources from the same s<N>.
+concurrency:
+  group: fetch-literature-${{ github.ref }}
+  cancel-in-progress: false
 
 defaults:
   run:
@@ -39,8 +44,13 @@ jobs:
     name: Fetch the literature
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      LITERATURE_DIR: ${{ runner.temp }}/literature
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
@@ -55,7 +65,7 @@ jobs:
           SEMANTIC_SCHOLAR_API_KEY: ${{ secrets.SEMANTIC_SCHOLAR_API_KEY }}
         run: |
           set -euo pipefail
-          args=(--query "$QUERY" --output-dir literature
+          args=(--query "$QUERY" --output-dir "$LITERATURE_DIR"
                 --sources "$SOURCES" --max-results-per-source "$MAX_RESULTS_PER_SOURCE")
           [ -n "$YEAR" ] && args+=(--year "$YEAR")
           [ "$OPENALEX_SEMANTIC" = "true" ] && args+=(--openalex-semantic)
@@ -66,8 +76,32 @@ jobs:
       - name: Upload the literature
         uses: actions/upload-artifact@v4
         with:
-          # import_literature_from_artifacts and the record gate look the artifact up by this name.
+          # The record gate looks the artifact up by this name.
           name: literature-${{ github.run_id }}
-          path: literature
+          path: ${{ env.LITERATURE_DIR }}
           if-no-files-found: error
           retention-days: 90
+
+      - name: Import into .research/sources/
+        run: |
+          # airas の commit SHA は、airas 側の CI（pin_airas_template.yml）によって自動的に書き換えられる。
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@fb5e4e9427545a152f412640e3bbab1b43795cda#subdirectory=backend" \
+            airas import-literature-from-artifact --artifact-dir "$LITERATURE_DIR" \
+              --workflow-run-id "$GITHUB_RUN_ID" --local-path .
+
+      - name: Commit and push onto the dispatched branch
+        env:
+          QUERY: ${{ inputs.query }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .research/sources
+          git commit -q -m "literature: import fetch_literature run $GITHUB_RUN_ID" -m "query: $QUERY"
+          # The agent may push to the same branch meanwhile; sources/ is only ever written here.
+          for attempt in 1 2 3; do
+            git push -q && exit 0
+            git pull -q --rebase
+          done
+          echo "::error::could not push onto $GITHUB_REF_NAME"
+          exit 1
