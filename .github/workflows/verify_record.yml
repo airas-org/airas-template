@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: read
+  # The gate downloads fetch_literature.yml's artifact to compare .research/sources/ against it.
+  actions: read
 
 defaults:
   run:
