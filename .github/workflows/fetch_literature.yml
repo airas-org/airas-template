@@ -77,7 +77,7 @@ jobs:
           [ -n "$YEAR" ] && args+=(--year "$YEAR")
           [ "$OPENALEX_SEMANTIC" = "true" ] && args+=(--openalex-semantic)
           # airas の commit SHA は、airas 側の CI（pin_airas_template.yml）によって自動的に書き換えられる。
-          uvx --from "airas @ git+https://github.com/airas-org/airas.git@c8a8f017aa855f1abbc48b854f2f763a3971110b#subdirectory=backend" \
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@e1c37b5600acb4d717111b7a5789a2144a184959#subdirectory=backend" \
             airas fetch-literature "${args[@]}"
 
       - name: Upload the literature
@@ -92,7 +92,7 @@ jobs:
       - name: Import into .research/sources/
         run: |
           # airas の commit SHA は、airas 側の CI（pin_airas_template.yml）によって自動的に書き換えられる。
-          uvx --from "airas @ git+https://github.com/airas-org/airas.git@c8a8f017aa855f1abbc48b854f2f763a3971110b#subdirectory=backend" \
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@e1c37b5600acb4d717111b7a5789a2144a184959#subdirectory=backend" \
             airas import-literature-from-artifact --artifact-dir "$LITERATURE_DIR" \
               --workflow-run-id "$GITHUB_RUN_ID" --local-path .
 
