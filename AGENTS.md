@@ -27,9 +27,9 @@ full run, on top of the experiment code. Results come back through
 fit data later; a refuted claim is a negative result.
 
 Literature enters `.research/sources/` only from CI: `dispatch_literature_fetch`
-runs a search in `fetch_literature.yml`, which commits every result onto the
-branch; pull it, then read the sources. Never write `.research/sources/` by
-hand — the gate compares each source new to the default branch with the
+fetches query results or exact papers specified by `arxiv_ids` and/or `dois`
+in `fetch_literature.yml`, which commits them onto the branch; pull it, then
+read the sources. Never write `.research/sources/` by hand — the gate compares each source new to the default branch with the
 artifact of the run it claims to come from.
 
 The step-by-step flow is in the `airas` plugin skills (`auto-research`
