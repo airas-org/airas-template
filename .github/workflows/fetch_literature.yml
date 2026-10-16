@@ -1,18 +1,19 @@
 name: "Fetch Literature"
-run-name: "📚 Fetch literature: ${{ inputs.query }}"
+run-name: "📚 Fetch literature: ${{ inputs.query || format('arXiv {0}; DOI {1}', inputs.arxiv_ids, inputs.dois) }}"
 
-# The only way literature enters .research/sources/: this run searches,
-# fetches every result's text and the search source's metadata, uploads them
-# as an artifact, and commits a byte-for-byte copy onto the dispatched branch.
-# The record gate compares every source new to the default branch with that
-# artifact. The checkout is only written to: no file from the repository is
+# The checkout is only written to: no file from the repository is
 # executed, so what the run fetched does not depend on files the agent can edit.
 on:
   workflow_dispatch:
     inputs:
       query:
-        description: "Search query"
-        required: true
+        description: "Search query (exclusive with identifiers)"
+      arxiv_ids:
+        description: 'JSON array of raw arXiv IDs, e.g. ["1706.03762v7"]'
+        default: "[]"
+      dois:
+        description: 'JSON array of raw DOIs, e.g. ["10.18653/v1/N18-3011"]'
+        default: "[]"
       sources:
         description: 'Comma-separated search sources, or "all"'
         default: "arxiv,airas_records"
@@ -55,9 +56,11 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Search and fetch
+      - name: Fetch literature
         env:
           QUERY: ${{ inputs.query }}
+          ARXIV_IDS: ${{ inputs.arxiv_ids }}
+          DOIS: ${{ inputs.dois }}
           SOURCES: ${{ inputs.sources }}
           MAX_RESULTS_PER_SOURCE: ${{ inputs.max_results_per_source }}
           YEAR: ${{ inputs.year }}
@@ -66,12 +69,15 @@ jobs:
           SEMANTIC_SCHOLAR_API_KEY: ${{ secrets.SEMANTIC_SCHOLAR_API_KEY }}
         run: |
           set -euo pipefail
-          args=(--query "$QUERY" --output-dir "$LITERATURE_DIR"
+          args=(--output-dir "$LITERATURE_DIR"
                 --sources "$SOURCES" --max-results-per-source "$MAX_RESULTS_PER_SOURCE")
+          [ -n "$QUERY" ] && args+=(--query "$QUERY")
+          [ -n "$ARXIV_IDS" ] && args+=(--arxiv-ids "$ARXIV_IDS")
+          [ -n "$DOIS" ] && args+=(--dois "$DOIS")
           [ -n "$YEAR" ] && args+=(--year "$YEAR")
           [ "$OPENALEX_SEMANTIC" = "true" ] && args+=(--openalex-semantic)
           # airas の commit SHA は、airas 側の CI（pin_airas_template.yml）によって自動的に書き換えられる。
-          uvx --from "airas @ git+https://github.com/airas-org/airas.git@3afe10307cd18e0193bc837d62af915caca0424e#subdirectory=backend" \
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@c8a8f017aa855f1abbc48b854f2f763a3971110b#subdirectory=backend" \
             airas fetch-literature "${args[@]}"
 
       - name: Upload the literature
@@ -86,19 +92,21 @@ jobs:
       - name: Import into .research/sources/
         run: |
           # airas の commit SHA は、airas 側の CI（pin_airas_template.yml）によって自動的に書き換えられる。
-          uvx --from "airas @ git+https://github.com/airas-org/airas.git@3afe10307cd18e0193bc837d62af915caca0424e#subdirectory=backend" \
+          uvx --from "airas @ git+https://github.com/airas-org/airas.git@c8a8f017aa855f1abbc48b854f2f763a3971110b#subdirectory=backend" \
             airas import-literature-from-artifact --artifact-dir "$LITERATURE_DIR" \
               --workflow-run-id "$GITHUB_RUN_ID" --local-path .
 
       - name: Commit and push onto the dispatched branch
         env:
           QUERY: ${{ inputs.query }}
+          ARXIV_IDS: ${{ inputs.arxiv_ids }}
+          DOIS: ${{ inputs.dois }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .research/sources
-          git commit -q -m "literature: import fetch_literature run $GITHUB_RUN_ID" -m "query: $QUERY"
+          git commit -q -m "literature: import fetch_literature run $GITHUB_RUN_ID" -m "query: $QUERY" -m "arxiv_ids: $ARXIV_IDS" -m "dois: $DOIS"
           # The agent may push to the same branch meanwhile; sources/ is only ever written here.
           for attempt in 1 2 3; do
             git push -q && exit 0
